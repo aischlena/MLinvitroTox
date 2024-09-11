@@ -344,3 +344,8 @@ tags
 /results/*
 /tmp/*
 /models/*
+
+/data/input/hrms_massbank/published/*
+/data/input/sirius/massbank_toxicity_5o8_eawag_sept2023_all/*
+/data/input/sirius/sources_fractions/*
+
