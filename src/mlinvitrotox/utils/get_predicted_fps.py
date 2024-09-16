@@ -221,7 +221,7 @@ def keep_selected_fps_bits(
     df_predfps_selected = df_predfps.loc[:, columns_to_keep]
 
     print(
-        f"Dataframe with predicted fingerprints: {df_predfps_selected.shape[0]} entries, {df_predfps_selected.shape[1]} fingerprint bits"
+        f"Dataframe with provided fingerprints: {df_predfps_selected.shape[0]} entries, {df_predfps_selected.shape[1]} fingerprint bits"
     )
 
     return df_predfps_selected

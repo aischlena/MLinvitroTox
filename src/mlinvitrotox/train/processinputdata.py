@@ -15,6 +15,7 @@ from mlinvitrotox.constants import (
     # IDs
     CHEM_ID,
     MASSBANK_ID,
+    SMILES_ID,
     # Paths
     MASSBANK_INPUT_DIR_PATH,
     SIRIUS_INPUT_DIR_PATH,
@@ -144,8 +145,10 @@ for step in ["TRAINING", "VALIDATION"]:
     )
 
     # process molecules
+    smiles = SMILES_ID
     get_truefps.process_molecules(
         id,
+        smiles,
         fps_input_path,
         df_csi,
         fps_output_path,

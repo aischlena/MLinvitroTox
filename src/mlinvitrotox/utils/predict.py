@@ -33,6 +33,7 @@ def get_aeids_from_path(base_path):
 
 def load_application_data(
     fps_input_file,
+    id=None,
 ):
     if isinstance(fps_input_file, Path) and fps_input_file.suffix == ".csv":
         df = pd.read_csv(fps_input_file)
@@ -41,6 +42,8 @@ def load_application_data(
 
     # List of possible chemical ID columns
     possible_id_columns = ["dtxsid", "guid", "features", "sirius_id"]
+    if id is not None:
+        possible_id_columns += [id]
 
     # Initialize a variable to store the name of the found ID column
     found_id_column = None
@@ -49,25 +52,16 @@ def load_application_data(
     cols_df = [col.lower() for col in df.columns]
     for column in possible_id_columns:
         if column.lower() in cols_df:
-            found_id_column = column  # Store the found ID column name
+            found_id_column = column
             df.rename(columns={column: "chem_id"}, inplace=True)
             break  # Assuming only one such column exists, exit the loop after renaming
 
     # If no predefined ID column is found, prompt the user for selection
     if found_id_column is None:
         print(
-            "No predefined ID column found. Please select the ID column from the list below:"
+            "No predefined ID column found. Rerun with the option --id set to the ID column in your input file."
         )
-        for index, column in enumerate(df.columns, start=1):
-            print(f"{index}. {column}")
-        selected_index = int(input("Enter the number of the ID column: ")) - 1
-        if 0 <= selected_index < len(df.columns):
-            selected_column = df.columns[selected_index]
-            df.rename(columns={selected_column: "chem_id"}, inplace=True)
-            found_id_column = selected_column
-        else:
-            print("Invalid selection. Exiting without renaming columns.")
-            return df  # Early return in case of invalid selection
+        return df
 
     # Filter columns to retain only the ID column and those with numbers in their names (considered feature columns)
     feature_columns = [

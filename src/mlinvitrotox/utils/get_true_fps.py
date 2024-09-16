@@ -13,11 +13,6 @@ from rdkit.Chem.MolStandardize import rdMolStandardize
 from openbabel import pybel
 from CDK_pywrapper import CDK, FPType
 
-from mlinvitrotox.constants import (
-    # IDs
-    SMILES_ID,
-)
-
 
 def remove_illegal_smiles(df, smiles_column, nonallowed):
     """Remove rows where SMILES string contains specific non-allowed strings or characters"""
@@ -67,14 +62,16 @@ def standardize_mol(mol):
 
 def process_molecules(
     id,
+    smiles,
     fps_input_path,
     df_csi,
     fps_output_path,
     csv_output_path,
     sdf_output_path,
+    store_as_csv=False,
 ):
-    # Set ID for SMILES
-    smiles = SMILES_ID
+    ## Set ID for SMILES
+    #smiles = SMILES_ID
 
     # Read the CSV data
     data = pd.read_csv(fps_input_path)
@@ -105,10 +102,6 @@ def process_molecules(
 
     # standardize according to chemdbl procedure
     df["standardized_smiles"] = df[smiles].apply(standardize_smiles)
-    # df["standardized_mol"] = df["sdf"].apply(standardize_mol)
-    # df["standardized_smiles"] = df["standardized_mol"].apply(
-    # lambda x: Chem.MolToSmiles(x) if x else None
-    # )
     df["standardized_mol"] = df["standardized_smiles"].apply(
         lambda x: Chem.MolFromSmiles(x) if x else None
     )
@@ -131,7 +124,7 @@ def process_molecules(
 
     # generate FP3 and FP4 OB fingerprints via pybel
     allmols_with_dtxsid = []
-    for mol in pybel.readfile("sdf", sdf_output_path):
+    for mol in pybel.readfile("sdf", str(sdf_output_path)):
         if mol is not None:
             # Try to retrieve the molecule_id, default to "Unknown" if not found
             try:
@@ -246,8 +239,6 @@ def process_molecules(
     filtered_df_fps = df_fps[list(valid_indices)]
     filtered_df_fps.columns = [str(col).zfill(4) for col in filtered_df_fps.columns]
 
-    # return filtered_df_fps
-
     # Define the ranges of each fingerprint type
     # This ranges are only informative and not used later on.
     openbabel_fp3_range = range(0, 55)
@@ -268,8 +259,10 @@ def process_molecules(
 
     filtered_df_fps = filtered_df_fps.reset_index().rename(columns={"index": id})
     filtered_df_fps = filtered_df_fps.sort_values(id)
-    filtered_df_fps.to_parquet(fps_output_path, index=False)
-    # filtered_df_fps.to_csv(fps_output_path, index=False)
+    if store_as_csv:
+        filtered_df_fps.to_csv(fps_output_path, index=False)
+    else:
+        filtered_df_fps.to_parquet(fps_output_path, index=False)
 
     print("The shape of the final data frame with fingerprints:")
     print(filtered_df_fps.shape)
