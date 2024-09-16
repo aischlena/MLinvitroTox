@@ -233,15 +233,18 @@ def plot_metrics_density(df_column_metrics, output_figure):
 
 
 def save_indexes_passed_validation(
-    df_metrics_bit, threshold_recall, threshold_precision, output_file
+    df_metrics_bit, 
+    threshold_recall, 
+    threshold_precision, 
+    output_file
 ):
     passed_validation = df_metrics_bit[
         (df_metrics_bit["Recall"] > threshold_recall)
         & (df_metrics_bit["Precision"] > threshold_precision)
     ]
-    indexes_passed = pd.DataFrame(passed_validation.index, columns=["absoluteIndex"])
-    print(f"Original # indexes {df_metrics_bit.shape}")
-    print(f"Filtered # indexes {indexes_passed.shape}")
+    df_indexes_passed = pd.DataFrame(passed_validation.index, columns=["absoluteIndex"])
+    print(f"Initial number of AbsoluteIndexes: {df_metrics_bit.shape}")
+    print(f"Filtered number of AbsoluteIndexes: {df_indexes_passed.shape}")
 
     # store output
-    indexes_passed.to_csv(output_file, index=False)
+    df_indexes_passed.to_csv(output_file, index=False)

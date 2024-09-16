@@ -55,53 +55,51 @@ validation_fps_output_directory = Path(VALIDATION_FPS_OUTPUT_DIR_PATH)
 
 # * Extract and process MassBank HRMS data
 
-# TODO remove
-if 0:
-    # process MassBank input files
-    massbank_input_folder = massbank_input_directory / MASSBANK_INPUT_DIR_FOLDER
-    result_df = extract_mbd.process_files(massbank_input_folder)
+# process MassBank input files
+massbank_input_folder = massbank_input_directory / MASSBANK_INPUT_DIR_FOLDER
+result_df = extract_mbd.process_files(massbank_input_folder)
 
-    # load SIRIUS training file with INCHIs and DTXSIDs
-    sirius_training_file = (
-        sirius_input_directory / SIRIUS_TRAINING_STRUCTURES_INCHI_DTXSID
-    )
-    df_sirius_training = pd.read_csv(sirius_training_file)
-    df_sirius_training = df_sirius_training.loc[
-        df_sirius_training[CHEM_ID].notna(), [CHEM_ID]
-    ]
+# load SIRIUS training file with INCHIs and DTXSIDs
+sirius_training_file = (
+    sirius_input_directory / SIRIUS_TRAINING_STRUCTURES_INCHI_DTXSID
+)
+df_sirius_training = pd.read_csv(sirius_training_file)
+df_sirius_training = df_sirius_training.loc[
+    df_sirius_training[CHEM_ID].notna(), [CHEM_ID]
+]
 
-    # prepare GUIDs
-    # (this code only needs to be run once)
-    massbank_unique_guid_path = massbank_input_directory / MASSBANK_UNIQUE_GUID
-    create_unique_guids = False
-    if create_unique_guids:
-        n_files = 20000
-        extract_mbd.create_and_store_unique_guids(massbank_unique_guid_path, n_files)
+# prepare GUIDs
+# (this code only needs to be run once)
+massbank_unique_guid_path = massbank_input_directory / MASSBANK_UNIQUE_GUID
+create_unique_guids = False
+if create_unique_guids:
+    n_files = 20000
+    extract_mbd.create_and_store_unique_guids(massbank_unique_guid_path, n_files)
 
-    # load unique guids
-    df_guid = pd.read_csv(massbank_unique_guid_path)
+# load unique guids
+df_guid = pd.read_csv(massbank_unique_guid_path)
 
-    # set file paths for output files
-    # massbank summary grouped by SMILES
-    output_file_structures_validation = (
-        massbank_output_directory / EXTRACTED_MASSBANK_SUMMARY_SMILES
-    )
-    # complete massbank summary by ACCESSION
-    output_file_extracted_massbank = (
-        massbank_output_directory / EXTRACTED_MASSBANK_SUMMARY_COMPLETE
-    )
-    # file to match GUID and DTXSID
-    output_file_guid_dtxsid = massbank_output_directory / EXTRACTED_MASSBANK_GUID_DTXSID
+# set file paths for output files
+# massbank summary grouped by SMILES
+output_file_structures_validation = (
+    massbank_output_directory / EXTRACTED_MASSBANK_SUMMARY_SMILES
+)
+# complete massbank summary by ACCESSION
+output_file_extracted_massbank = (
+    massbank_output_directory / EXTRACTED_MASSBANK_SUMMARY_COMPLETE
+)
+# file to match GUID and DTXSID
+output_file_guid_dtxsid = massbank_output_directory / EXTRACTED_MASSBANK_GUID_DTXSID
 
-    # filter data
-    extract_mbd.filter_data(
-        result_df,
-        df_sirius_training,
-        df_guid,
-        output_file_structures_validation,
-        output_file_extracted_massbank,
-        output_file_guid_dtxsid,
-    )
+# filter data
+extract_mbd.filter_data(
+    result_df,
+    df_sirius_training,
+    df_guid,
+    output_file_structures_validation,
+    output_file_extracted_massbank,
+    output_file_guid_dtxsid,
+)
 
 # * Get true fingerprints for training and validation molecules
 
@@ -109,55 +107,53 @@ if 0:
 sirius_fps_df_path = sirius_input_directory / SIRIUS_FPS_DEFINITIONS
 df_csi = pd.read_csv(sirius_fps_df_path, sep="\t")
 
-# TODO remove
-if 0:
-    for step in ["TRAINING", "VALIDATION"]:
-        print(step)
+for step in ["TRAINING", "VALIDATION"]:
+    print(step)
 
-        # set id for chemical, and input and output paths
-        if step == "TRAINING":
-            # id
-            id = CHEM_ID
+    # set id for chemical, and input and output paths
+    if step == "TRAINING":
+        # id
+        id = CHEM_ID
 
-            # input
-            fps_input_file = INVITRODB_CHEMICAL_LIST
-            fps_input_path = invitro_input_directory / fps_input_file
+        # input
+        fps_input_file = INVITRODB_CHEMICAL_LIST
+        fps_input_path = invitro_input_directory / fps_input_file
 
-            # output
-            fps_output_path = fps_output_directory / TRUE_FPS_TRAINING
+        # output
+        fps_output_path = fps_output_directory / TRUE_FPS_TRAINING
 
-        elif step == "VALIDATION":
-            # id
-            id = MASSBANK_ID
+    elif step == "VALIDATION":
+        # id
+        id = MASSBANK_ID
 
-            # input
-            fps_input_file = EXTRACTED_MASSBANK_SUMMARY_SMILES
-            fps_input_path = massbank_output_directory / fps_input_file
+        # input
+        fps_input_file = EXTRACTED_MASSBANK_SUMMARY_SMILES
+        fps_input_path = massbank_output_directory / fps_input_file
 
-            # output
-            fps_output_path = fps_output_directory / TRUE_FPS_VALIDATION
+        # output
+        fps_output_path = fps_output_directory / TRUE_FPS_VALIDATION
 
-        else:
-            print("Please specify a valid step.")
+    else:
+        print("Please specify a valid step.")
 
-        # set sdf and csv output path
-        base_file_name = os.path.splitext(fps_input_file)[0]
-        sdf_output_path = os.path.join(
-            intermediate_fps_output_directory, f"{base_file_name}_clean.sdf"
-        )
-        csv_output_path = os.path.join(
-            intermediate_fps_output_directory, f"{base_file_name}_clean.csv"
-        )
+    # set sdf and csv output path
+    base_file_name = os.path.splitext(fps_input_file)[0]
+    sdf_output_path = os.path.join(
+        intermediate_fps_output_directory, f"{base_file_name}_clean.sdf"
+    )
+    csv_output_path = os.path.join(
+        intermediate_fps_output_directory, f"{base_file_name}_clean.csv"
+    )
 
-        # process molecules
-        get_truefps.process_molecules(
-            id,
-            fps_input_path,
-            df_csi,
-            fps_output_path,
-            csv_output_path,
-            sdf_output_path,
-        )
+    # process molecules
+    get_truefps.process_molecules(
+        id,
+        fps_input_path,
+        df_csi,
+        fps_output_path,
+        csv_output_path,
+        sdf_output_path,
+    )
 
 
 # * Process validation and application output from SIRIUS
@@ -261,25 +257,18 @@ for step in ["VALIDATION", "APPLICATION"]:
     )
 
     # store output
-    # TODO sort by "features" column?
     df_predfps_final.to_parquet(predfps_output_path, index=False)
 
 
 # * Perform SIRIUS validation
-# TODO decide what we need for paper (only for supplementary)
-# TODO only write code for that
-
-# TODO filter for safe SIRIUS compounds (ie those not used for training SIRIUS)
-# TODO 1 figure predicted vs true, false predictions marked in colors
-# TODO report Tanimoto, recall, precision
-
 
 # Load MassBank validation dataframes
 input_true_fps_validation = fps_output_directory / TRUE_FPS_VALIDATION
 input_pred_fps_validation = fps_output_directory / PRED_FPS_VALIDATION
 df_mbval_true_fps = validate.load_massbank_val_df(input_true_fps_validation)
 df_mbval_pred_fps = validate.load_massbank_val_df(input_pred_fps_validation)
-# introduced after switching from csv to parquet files for fingerprints
+
+# process and drop columns 
 if "sirius_id" in df_mbval_pred_fps.columns:
     df_mbval_pred_fps["sirius_id"] = df_mbval_pred_fps["sirius_id"].astype("int")
 df_mbval_pred_fps = df_mbval_pred_fps.drop(
@@ -291,22 +280,6 @@ df_mbval_pred_fps = df_mbval_pred_fps.drop(
     df_mbval_true_fps, df_mbval_pred_fps
 )
 
-# Calculate validation metrics per chemical (GUID)
-output_metrics = (
-    validation_fps_output_directory / "massbank_validation_metrics_guid.csv"
-)
-df_metrics_chem = validate.calculate_metrics_per_chemical(
-    df_mbval_true_fps_filtered, df_mbval_pred_fps_filtered, output_metrics
-)
-
-# Create discrepancy figure
-output_figure = (
-    validation_fps_output_directory / "massbank_validation_difference_heatmap.png"
-)
-validate.generate_discrepancy_figure(
-    df_mbval_true_fps_filtered, df_mbval_pred_fps_filtered, output_figure
-)
-
 # Calculate metrics per fingerprint bit
 output_metrics_bit = (
     validation_fps_output_directory / "massbank_validation_metrics_absindex.csv"
@@ -314,18 +287,6 @@ output_metrics_bit = (
 df_metrics_bit = validate.calculate_metrics_per_bit(
     df_mbval_true_fps_filtered, df_mbval_pred_fps_filtered, output_metrics_bit
 )
-
-# Create histogram
-output_figure = (
-    validation_fps_output_directory / "massbank_validation_metrics_histogram.png"
-)
-validate.plot_metrics_histogram(df_metrics_bit, output_figure)
-
-# Create density plot
-output_figure = (
-    validation_fps_output_directory / "massbank_validation_metrics_density.png"
-)
-validate.plot_metrics_density(df_metrics_bit, output_figure)
 
 # Only keep fingerprint bits which were fit well enough
 threshold_recall = 0.75
@@ -335,37 +296,16 @@ validate.save_indexes_passed_validation(
     df_metrics_bit, threshold_recall, threshold_precision, output_file
 )
 
-# %%
-
-# implement safe and unsafe compounds validation
-
-# only keep chemicals which are also in predicted fps dataframe
-# TODO why is this filtering step different from filtering in filter_mb_vals()?
-df_mbval_true_fps_filtered2 = df_mbval_true_fps[
-    df_mbval_true_fps[MASSBANK_ID].isin(df_mbval_pred_fps[MASSBANK_ID])
-]
-print(df_mbval_pred_fps.shape)
-print(df_mbval_true_fps_filtered2.shape)
-
 # Check if the MASSBANK_ID columns are the same in both dataframes
 columns_are_same = (
-    df_mbval_true_fps_filtered2[MASSBANK_ID].sort_values().reset_index(drop=True)
+    df_mbval_true_fps_filtered.index.sort_values()
     == df_mbval_pred_fps[MASSBANK_ID].sort_values().reset_index(drop=True)
 ).all()
 print(f"MASSBANK_ID columns are the same: {columns_are_same}")
-duplicates_true_fps = (
-    df_mbval_true_fps_filtered2.set_index(MASSBANK_ID).duplicated().sum()
-)
-# duplicates_pred_fps = df_mbval_pred_fps.set_index(MASSBANK_ID).duplicated().sum()
+duplicates_true_fps = df_mbval_true_fps_filtered.duplicated().sum()
+duplicates_pred_fps = df_mbval_pred_fps.set_index(MASSBANK_ID).duplicated().sum()
 print(f"Number of duplicate rows in df_mbval_true_fps_filtered: {duplicates_true_fps}")
-# print(f"Number of duplicate rows in df_mbval_pred_fps: {duplicates_pred_fps}")
-
-# filter the columns of df_mbval_pred_fps to keep only the common columns
-# this is not needed later on
-list_cols = [c for c in df_mbval_true_fps.columns if c in df_mbval_pred_fps.columns]
-df_mbval_pred_fps_filtered = df_mbval_pred_fps[list_cols]
-print(df_mbval_pred_fps_filtered.shape)
-print(df_mbval_pred_fps_filtered.columns)
+print(f"Number of duplicate rows in df_mbval_pred_fps: {duplicates_pred_fps}")
 
 # read the GUID_DTXSID massbank summary file to filter on
 input_GUID_DTXSID = massbank_output_directory / EXTRACTED_MASSBANK_GUID_DTXSID
@@ -382,7 +322,6 @@ df_mbval_pred_fps_relevant = pd.merge(
 )
 
 # sort columns
-print(df_mbval_pred_fps_relevant)
 list_cols = sorted(df_mbval_pred_fps_relevant.columns)
 list_cols = [CHEM_ID, MASSBANK_ID] + [
     c for c in list_cols if c not in [CHEM_ID, MASSBANK_ID]
@@ -396,22 +335,12 @@ print(f"Number of duplicated DTXSIDs: {n_duplicated_dtxsid}")
 # for each duplicated DTXSID, we set a bit to 1 if it is active for one of the duplicates
 aggregated_df = df_mbval_pred_fps_relevant.groupby(CHEM_ID).agg("max")
 
-# check how many bits are affected
-# list_cols = [c for c in df_mbval_pred_fps_relevant.columns if c.isdigit()]
-# list_cols = [CHEM_ID] + list_cols
-# df_agg = df_mbval_pred_fps_relevant[list_cols].groupby(CHEM_ID).agg("mean")
-# (df_agg.isin([0, 1]).sum(axis=1) == 1797).sum()
-
-# %%
-
 if MASSBANK_ID in aggregated_df.columns:
     aggregated_df = aggregated_df.drop(columns=MASSBANK_ID)
 aggregated_df = aggregated_df.reset_index()
-
-print(aggregated_df.shape)
-print(aggregated_df.columns)
+print(f"Shape of aggregated dataframe: {aggregated_df.shape}")
+print(f"Columns of aggregated dataframe: {aggregated_df.columns}")
 
 # print to file to be used as reference for ML
 output_file = massbank_output_directory / VALIDATION_PRED_FPS_DTXSID
 aggregated_df.sort_values(CHEM_ID).to_csv(output_file, index=False)
-# %%
