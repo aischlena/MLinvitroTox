@@ -60,9 +60,7 @@ massbank_input_folder = massbank_input_directory / MASSBANK_INPUT_DIR_FOLDER
 result_df = extract_mbd.process_files(massbank_input_folder)
 
 # load SIRIUS training file with INCHIs and DTXSIDs
-sirius_training_file = (
-    sirius_input_directory / SIRIUS_TRAINING_STRUCTURES_INCHI_DTXSID
-)
+sirius_training_file = sirius_input_directory / SIRIUS_TRAINING_STRUCTURES_INCHI_DTXSID
 df_sirius_training = pd.read_csv(sirius_training_file)
 df_sirius_training = df_sirius_training.loc[
     df_sirius_training[CHEM_ID].notna(), [CHEM_ID]
@@ -268,7 +266,7 @@ input_pred_fps_validation = fps_output_directory / PRED_FPS_VALIDATION
 df_mbval_true_fps = validate.load_massbank_val_df(input_true_fps_validation)
 df_mbval_pred_fps = validate.load_massbank_val_df(input_pred_fps_validation)
 
-# process and drop columns 
+# process and drop columns
 if "sirius_id" in df_mbval_pred_fps.columns:
     df_mbval_pred_fps["sirius_id"] = df_mbval_pred_fps["sirius_id"].astype("int")
 df_mbval_pred_fps = df_mbval_pred_fps.drop(

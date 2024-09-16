@@ -233,10 +233,7 @@ def plot_metrics_density(df_column_metrics, output_figure):
 
 
 def save_indexes_passed_validation(
-    df_metrics_bit, 
-    threshold_recall, 
-    threshold_precision, 
-    output_file
+    df_metrics_bit, threshold_recall, threshold_precision, output_file
 ):
     passed_validation = df_metrics_bit[
         (df_metrics_bit["Recall"] > threshold_recall)

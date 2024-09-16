@@ -124,7 +124,8 @@ def read_fps_files(
     ]
     # only files in the main feature folders
     all_fps_files = [
-        p for p in all_fps_files
+        p
+        for p in all_fps_files
         if len(p.parents) == (len(input_fpt_directory.parents) + 2)
     ]
     print(f"Found {len(all_fps_files)} .fpt files.")

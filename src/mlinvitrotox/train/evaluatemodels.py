@@ -23,7 +23,7 @@ from mlinvitrotox.utils.model import Model
 def run_evaluation(model):
     """
     Evaluate models
-    
+
     """
     model_instance = Model()
     logs_folder = Path(MODELS_RESULTS_DIR_PATH)

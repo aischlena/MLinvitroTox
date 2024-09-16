@@ -27,7 +27,7 @@ from mlinvitrotox.utils.model import Model
 def run_models(input_file, model, output_folder):
     """
     Run models on molecular fingerprints
-    
+
     """
     model_instance = Model()
     model_path = Path(model)
