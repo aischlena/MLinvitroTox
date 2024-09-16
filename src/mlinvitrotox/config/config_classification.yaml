@@ -36,6 +36,7 @@ estimators:
   #         max_depth: [ 5 ] # [ 3, 5, 7, 9 ]
   #         n_jobs: [ -1 ]
 
+# !! use this for working on the code
   - name: XGBClassifier
     steps:
        - name: XGBClassifier
@@ -50,7 +51,7 @@ estimators:
             # device: [ 'cuda' ]
             tree_method: [ 'hist' ]
 
-# TODO use this again for modeling
+# !! use this for modeling
   #- name: XGBClassifier
     #steps:
        #- name: XGBClassifier

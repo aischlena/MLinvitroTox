@@ -1,9 +1,7 @@
 import os
 
 # Root and Base Directories
-#ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR_PATH = os.path.join("./src/mlinvitrotox/config")
-#CONFIG_DIR_PATH = os.path.join(ROOT_DIR, "config")
 DATA_DIR_PATH = os.path.join("./data")
 INPUT_DIR_PATH = os.path.join(DATA_DIR_PATH, "input")
 OUTPUT_DIR_PATH = os.path.join(DATA_DIR_PATH, "processed")
@@ -71,8 +69,8 @@ CONFIG_FILE = "config.yaml"
 CONFIG_MODELS_FILE = "config_classification.yaml"
 PYTCPL_INPUT_FOLDER = "pytcpl"
 
-REMOTE_DATA_DIR_PATH = os.path.join("../../../../pytcpl/data/")
-#REMOTE_DATA_DIR_PATH = os.path.join(ROOT_DIR, "../../../../pytcpl_eliza/data/")
+# !! specify the relative path of your pytcpl repository here
+REMOTE_DATA_DIR_PATH = os.path.join("../../pytcpl/data/")
 REMOTE_PYTCPL_FOLDER = "output_final/"
 
 ICE_REFERENCES = "ice_reference_file_mechtargets_aeid.csv"

@@ -34,16 +34,20 @@ from mlinvitrotox.constants import (
 )
 
 # !! in config_classiffication, use complete hyperparameter grid again
-# %%
 
 # Get pytcpl output from remote repository
 remote_pytcpl_folder = Path(REMOTE_DATA_DIR_PATH) / REMOTE_PYTCPL_FOLDER
 pytcpl_input_folder = Path(INVITRO_INPUT_DIR_PATH) / PYTCPL_INPUT_FOLDER
-if 0:
-    ml.empty_pytcpl_input_directory(pytcpl_input_folder)
-    ml.copy_pytcpl_parquet_files(remote_pytcpl_folder, pytcpl_input_folder)
+if 1:
+    if pytcpl_input_folder.is_dir():
+        ml.empty_pytcpl_input_directory(pytcpl_input_folder)
+    else:
+        pytcpl_input_folder.mkdir(parents=True, exist_ok=True)
 
-# %%
+    if remote_pytcpl_folder.is_dir():
+        ml.copy_pytcpl_parquet_files(remote_pytcpl_folder, pytcpl_input_folder)
+    else:
+        print("Provide a valid remote pytpcl folder in constants.py")
 
 # Set main folder to log results
 logs_folder = Path(MODELS_RESULTS_DIR_PATH)
@@ -62,7 +66,6 @@ CONFIG_ESTIMATORS = ml.init_ml_algo(ml_algorithm, str(config_models_path))
 # load ICE references file and pytcpl overview file
 ice_input_file = Path(INVITRO_INPUT_DIR_PATH) / ICE_REFERENCES
 ice_df = pd.read_csv(ice_input_file)
-# TODO copy from remote pytcpl repo
 pytcpl_overview_file = Path(INVITRO_INPUT_DIR_PATH) / PYTCPL_OVERVIEW_FILE
 pytcpl_df = pd.read_csv(pytcpl_overview_file)
 assay_info_df = ml.merge_assay_info(pytcpl_df, ice_df)
@@ -94,8 +97,10 @@ fps_df = ml.get_fingerprint_df(fps_input_file)
 
 # Iterate through aeids_target_assays and launch each iteration in a separate process
 selected_aeid_list = []
+# !! use the complete list for model training
 # for aeid in aeid_list:
-for aeid in aeid_list[:2]:
+# !! use a shorter list for working on the code
+for aeid in aeid_list[:3]:
     # log mechanistic target and aenm
     mech_target = aeid_info_df[aeid_info_df["aeid"].astype(str) == aeid][
         "MechanisticTarget"

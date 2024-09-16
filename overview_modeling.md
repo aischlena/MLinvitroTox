@@ -14,10 +14,8 @@ The directory structure and the correspondings paths are organized and specified
 
 We fit each assay endpoint separately. They are provided as parquet or csv files where the filename corresponds to the assay endpoint id (aeid). In pytcpl, assay endpoints with less than 50 chemicals were filtered out. In subsequent steps, assay endpoints can be summarized to mechanistic target or similar depending on the research question.
 
-TODO review above paragraph
 
-
-## Fit models (in 02)
+## Train models
 
 ### Code:
 - `src/mlinvitrotox/utils/training.py`
@@ -34,7 +32,7 @@ C. `src/mlinvitrotox/config/config_classification.yaml`
 
 #### pytcpl output for each aeid
 
-Parquet files from pytcpl, one for each assay endpoint
+Parquet files from pytcpl, one for each assay endpoint (in .gitignore, can be accessed through the pytcpl repository)
 
 7. pytcpl files
 
@@ -52,6 +50,8 @@ To filter aeids and to have information on the signal direction of the mechanist
 #### ICE references
 
 The ICE references data contains information on the mechanistic targets of each assay endpoint. 
+
+@Kasia: data source
 
 9. `data/input/invitro/ice_reference_file_mechtargets_aeid.csv`
 
@@ -87,7 +87,7 @@ If the config flag "sirius_quality_filtering" is set to 1, only the selected SIR
 
 #### Modeling log
 
-All the modeling output are stored in the models folder.
+All the modeling output are stored in the models folder. (in .gitignore)
 
 31. `data/results/models/<targetrun>/`
 
