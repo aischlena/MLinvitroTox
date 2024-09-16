@@ -8,7 +8,11 @@ from mlinvitrotox.utils.model import Model
 
 @click.command("run")
 @click.option(
-    "--model", "-m", required=True, help="name of the model or path to model file"
+    "--model", 
+    "-m", 
+    required=True, 
+    default="mlinvitrotox_model.itox",
+    help="name of the model or path to model file"
 )
 @click.option(
     "--input_file",

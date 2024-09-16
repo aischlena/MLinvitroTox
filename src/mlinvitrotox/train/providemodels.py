@@ -19,9 +19,19 @@ from mlinvitrotox.constants import (
     help="name of the model",
 )
 @click.option(
-    "--output", "-o", required=True, help="output filename (.itox) or directory"
+    "--output", 
+    "-o", 
+    required=True, 
+    help="output filename (.itox) or directory"
 )
-def export_model(model, output):
+@click.option(
+    "--export_stats", 
+    "-s", 
+    required=True, 
+    default=False,
+    help="include stats for app"
+)
+def export_model(model, output, export_stats):
     """
     Export model
 
@@ -30,7 +40,7 @@ def export_model(model, output):
     logs_folder = Path(MODELS_RESULTS_DIR_PATH)
     model_path = Path(logs_folder / model)
     model_instance.load(model_path)
-    model_instance.export(output)
+    model_instance.export(output, export_stats)
 
 
 if __name__ == "__main__":
