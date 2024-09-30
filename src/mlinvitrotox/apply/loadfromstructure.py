@@ -1,17 +1,10 @@
-#import sys
+import io
+import pkgutil
+from pathlib import Path
 
 import pandas as pd
 
-from pathlib import Path
-
 import mlinvitrotox.utils.get_true_fps as get_truefps
-
-from mlinvitrotox.constants import (
-    # Paths
-    SIRIUS_INPUT_DIR_PATH,
-    # Files
-    SIRIUS_FPS_DEFINITIONS,
-)
 
 import click
 
@@ -51,8 +44,8 @@ def load_from_structure(input_file, id, smiles, output_file):
     """
 
     # read fingerprint definitions
-    sirius_fps_df_path = Path(SIRIUS_INPUT_DIR_PATH) / SIRIUS_FPS_DEFINITIONS
-    df_csi = pd.read_csv(sirius_fps_df_path, sep="\t")
+    sirius_fps_data = pkgutil.get_data("mlinvitrotox", "data/csi_fingerid.tsv")
+    df_csi = pd.read_csv(io.BytesIO(sirius_fps_data), sep="\t")
 
     # in- and output
     fps_input_path = Path(input_file)

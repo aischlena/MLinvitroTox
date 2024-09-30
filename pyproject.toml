@@ -1,6 +1,6 @@
 [project]
 name = "MLinvitroTox"
-version = "0.3.0"
+version = "0.3.4"
 description = "MLinvitroTox performs high-throughput hazard-based prioritization of high-resolution mass spectrometry data."
 authors = [
     { name = "Katarzyna Arturi", email = "kasia.arturi@eawag.ch" },

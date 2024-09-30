@@ -1,4 +1,4 @@
-# Data processing: 2) process molecules
+# Data processing: 2) get true fingerprints
 import re
 
 import warnings
@@ -14,15 +14,25 @@ from openbabel import pybel
 from CDK_pywrapper import CDK, FPType
 
 
-def remove_illegal_smiles(df, smiles_column, nonallowed):
-    """Remove rows where SMILES string contains specific non-allowed strings or characters"""
+def remove_illegal_smiles(
+        df, 
+        col_smiles, 
+        nonallowed,
+    ):
+    """
+    Remove rows where SMILES string contains specific non-allowed strings or characters
+    """
     nonallowed_pattern = "|".join(map(re.escape, nonallowed))
-    mask = df[smiles_column].str.contains(nonallowed_pattern, na=False)
+    mask = df[col_smiles].str.contains(nonallowed_pattern, na=False)
     df_clean = df[~mask]
     return df_clean
 
 
-def standardize_smiles(raw_smiles):
+def _standardize_smiles(raw_smiles):
+    """
+    helper function to be used with pandas apply
+    
+    """
     if raw_smiles is None:
         return None
     try:
@@ -34,64 +44,37 @@ def standardize_smiles(raw_smiles):
         return std2_smiles
     except Exception as e:
         # Log the exception and return None
-        #        smiles = Chem.MolToSmiles(mol) if mol else "Invalid mol"
         logging.warning(f"Error processing molecule: {raw_smiles}; Error: {e}")
         return None
 
 
-def standardize_mol(mol):
-    if mol is None:
-        return None
-    try:
-        # Standardize and desalt the molecule
-        std1_mol = rdMolStandardize.StandardizeSmiles().standardize(
-            Chem.MolToSmiles(mol)
-        )
-        desalter = rdMolStandardize.LargestFragmentChooser()
-        desalt_mol = desalter.choose(std1_mol)
-        std2_mol = rdMolStandardize.StandardizeSmiles().standardize(
-            Chem.MolToSmiles(desalt_mol)
-        )
-        return std2_mol
-    except Exception as e:
-        # Log the exception and return None
-        smiles = Chem.MolToSmiles(mol) if mol else "Invalid mol"
-        logging.warning(f"Error processing molecule: {smiles}; Error: {e}")
-        return None
-
-
 def process_molecules(
-    id,
-    smiles,
-    fps_input_path,
-    df_csi,
-    fps_output_path,
-    csv_output_path,
-    sdf_output_path,
-    store_as_csv=False,
+        id,
+        smiles,
+        fps_input_path,
+        df_csi,
+        fps_output_path,
+        csv_output_path,
+        sdf_output_path,
+        store_as_csv=False,
 ):
-    ## Set ID for SMILES
-    #smiles = SMILES_ID
 
     # Read the CSV data
-    data = pd.read_csv(fps_input_path)
-    print("The shape of the input data frame with structures:")
-    print(data.shape)
+    df_fps_input = pd.read_csv(fps_input_path)
+    print(f"Dataframe with provided SMILES: {df_fps_input.shape[0]} entries")
 
     # Check for duplicates
-    if data[id].duplicated().any():
+    if df_fps_input[id].duplicated().any():
         warnings.warn(
-            f"There are duplicates in the file {fps_input_path} based on '{id}'"
+            f"The file {fps_input_path} contains duplicates based on the column '{id}'"
         )
 
-    # Only keep SMILES and chemical ID
-    keep_columns = [id, smiles]
-    df = data[keep_columns].copy()
-    print("The shape of the modified data frame:")
-    print(df.shape)
-    print(df.head())
+    # Keep SMILES and chemical ID
+    cols_to_keep = [id, smiles]
+    df = df_fps_input[cols_to_keep].copy()
 
     # pre-cleanup
+    print("Dataframe cleaning...")
     df.loc[:, id] = df[id].str.replace(
         "https://comptox.epa.gov/dashboard/chemical/details/", ""
     )
@@ -101,7 +84,7 @@ def process_molecules(
     df.dropna(subset=["sdf"], inplace=True)
 
     # standardize according to chemdbl procedure
-    df["standardized_smiles"] = df[smiles].apply(standardize_smiles)
+    df["standardized_smiles"] = df[smiles].apply(_standardize_smiles)
     df["standardized_mol"] = df["standardized_smiles"].apply(
         lambda x: Chem.MolFromSmiles(x) if x else None
     )
@@ -117,13 +100,12 @@ def process_molecules(
     writer.close()
 
     # Store csv file
-    columns_to_save = [id, smiles, "standardized_smiles"]
-    df[columns_to_save].sort_values(id).to_csv(csv_output_path, index=False)
-    print("The shape of the cleaned-up data frame with smiles and mols:")
-    print(df.shape)
+    cols_to_save = [id, smiles, "standardized_smiles"]
+    df[cols_to_save].sort_values(id).to_csv(csv_output_path, index=False)
+    print(f"After cleaning: {df.shape[0]} entries")
 
-    # generate FP3 and FP4 OB fingerprints via pybel
-    allmols_with_dtxsid = []
+    # generate FP3 and FP4 openbabel fingerprints via pybel
+    list_mols_dtxsid = []
     for mol in pybel.readfile("sdf", str(sdf_output_path)):
         if mol is not None:
             # Try to retrieve the molecule_id, default to "Unknown" if not found
@@ -135,112 +117,80 @@ def process_molecules(
                 )
             except Exception:
                 dtxsid = "Unknown"
-            allmols_with_dtxsid.append((dtxsid, mol))
+            list_mols_dtxsid.append((dtxsid, mol))
 
     # FP3
-    fps_FP3 = []
-    fp3_bits = []
-    for item in tqdm(allmols_with_dtxsid, desc="Calculating FP3", unit="mol"):
-        dtxsid, mol = item  # Correctly unpack the tuple
-        fp = mol.calcfp(fptype="FP3")
-        fps_FP3.append({id: dtxsid, "fp": fp})
-        fp3_bits.append({id: dtxsid, "bits": fp.bits})
-
-    binary_vectors_fp3 = []
+    list_binary_vectors_fp3 = []
     n_bits = 55
-
-    for item in tqdm(fps_FP3, desc="Processing FP3", unit="mol"):
-        fp_bits = item["fp"].bits
-        dtxsid = item[id]
+    for dtxsid, mol in tqdm(list_mols_dtxsid, desc="Calculating FP3", unit="mol"):
+        fp_bits_active = mol.calcfp(fptype="FP3").bits
         bv = np.zeros(n_bits, dtype=int)
-        if fp_bits:
-            fp_indexes = [i - 1 for i in fp_bits]
+        if fp_bits_active:
+            fp_indexes = [i - 1 for i in fp_bits_active]
             bv[fp_indexes] = 1
-        # Append the bits directly rather than as a 'vector' key
-        binary_vectors_fp3.append(
+        # Append the bits directly
+        list_binary_vectors_fp3.append(
             {**{f"fp3_bit_{i+1}": bv[i] for i in range(n_bits)}, id: dtxsid}
         )
 
-    df_binary_vectors_fp3 = pd.DataFrame(binary_vectors_fp3)
+    df_binary_vectors_fp3 = pd.DataFrame(list_binary_vectors_fp3)
     df_binary_vectors_fp3 = df_binary_vectors_fp3.set_index(id)
-    print(f"columns of fp3 df: {df_binary_vectors_fp3.columns}")
-    print(f"index of fp3 df: {df_binary_vectors_fp3.index}")
 
     # FP4
-    fps_FP4 = []
-    fp4_bits = []
-    for item in tqdm(allmols_with_dtxsid, desc="Calculating FP4", unit="mol"):
-        dtxsid, mol = item  # Correctly unpack the tuple
-        fp = mol.calcfp(fptype="FP4")
-        fps_FP4.append({id: dtxsid, "fp": fp})
-        fp4_bits.append({id: dtxsid, "bits": fp.bits})
-
-    binary_vectors_fp4 = []
-    n_bits = 307  # Adjust the number of bits for FP4
-
-    for item in tqdm(fps_FP4, desc="Processing FP4", unit="mol"):
-        fp_bits = item["fp"].bits
-        dtxsid = item[id]
+    list_binary_vectors_fp4 = []
+    n_bits = 307
+    for dtxsid, mol in tqdm(list_mols_dtxsid, desc="Calculating FP4", unit="mol"):
+        fp_bits_active = mol.calcfp(fptype="FP4").bits
         bv = np.zeros(n_bits, dtype=int)
-        if fp_bits:
-            fp_indexes = [i - 1 for i in fp_bits]
+        if fp_bits_active:
+            fp_indexes = [i - 1 for i in fp_bits_active]
             bv[fp_indexes] = 1
-        # Append the bits directly rather than as a 'vector' key
-        binary_vectors_fp4.append(
+        # Append the bits directly
+        list_binary_vectors_fp4.append(
             {**{f"fp4_bit_{i+1}": bv[i] for i in range(n_bits)}, id: dtxsid}
         )
 
-    df_binary_vectors_fp4 = pd.DataFrame(binary_vectors_fp4)
+    df_binary_vectors_fp4 = pd.DataFrame(list_binary_vectors_fp4)
     df_binary_vectors_fp4 = df_binary_vectors_fp4.set_index(id)
-    print(f"columns of fp4 df: {df_binary_vectors_fp4.columns}")
-    print(f"index of fp4 df: {df_binary_vectors_fp4.index}")
 
     # concatenate FP3 and FP4
     df_obabel = pd.concat([df_binary_vectors_fp3, df_binary_vectors_fp4], axis=1)
-    print("The shape of the obabel data frame:")
-    print(df_obabel.shape)
-    print("The index of the obabel data frame:")
-    print(df_obabel.index)
 
-    # create MACCS, PubChem and Klekota Roth fingerprints with CKW_pywrapper
-    mols_list = []
-    chem_ids_list = []
+    # create MACCS, PubChem and Klekota-Roth fingerprints with CKW_pywrapper
+    list_mols = []
+    list_chem_ids = []
     sdf_supplier = Chem.SDMolSupplier(sdf_output_path)
 
-    for mol in tqdm(sdf_supplier, desc="Processing Molecules", unit="mol"):
+    for mol in tqdm(sdf_supplier, desc="Preparing for MACCS, PubChem and Klekota-Roth", unit="mol"):
         if mol is not None:
-            mols_list.append(Chem.AddHs(mol))
-            chem_ids_list.append(mol.GetProp(id))
+            list_mols.append(Chem.AddHs(mol))
+            list_chem_ids.append(mol.GetProp(id))
 
     # calculate fingerprints
+    print("Calculating MACCS, PubChem and Klekota-Roth fingerprints takes some time...")
     cdk = CDK(fingerprint=FPType.MACCSFP)
-    df_maccs = cdk.calculate(mols_list, show_banner=False)
+    df_maccs = cdk.calculate(list_mols, show_banner=False)
     cdk = CDK(fingerprint=FPType.PubchemFP)
-    df_pubchem = cdk.calculate(mols_list, show_banner=False)
+    df_pubchem = cdk.calculate(list_mols, show_banner=False)
     cdk = CDK(fingerprint=FPType.KRFP)
-    df_klekotaroth = cdk.calculate(mols_list, show_banner=False)
+    df_klekotaroth = cdk.calculate(list_mols, show_banner=False)
 
     # concatenate CDK fingerprints
     df_cdk = pd.concat((df_maccs, df_pubchem, df_klekotaroth), axis=1)
-    df_cdk.index = chem_ids_list
-    print("The shape of the CDK data frame:")
-    print(df_cdk.shape)
+    df_cdk.index = list_chem_ids
 
     # concatenate CKD and pybel fingerprints
     df_fps = pd.concat((df_obabel, df_cdk), axis=1)
-    df_fps.dropna(inplace=True)
-    print("The shape of the initial combined obabel and pyfps data frame:")
-    print(df_fps.shape)
+    print(f"FP3, FP4, MACCS, PubChem, Klekota-Roth: {df_fps.shape[1]} bits before overlap with SIRIUS bits")
     df_fps.columns = range(len(df_fps.columns))
 
-    # CSI FingerID definitions
+    # get overlap with CSI FingerID absoluteIndex
     df_csi["absoluteIndex"] = df_csi["absoluteIndex"].astype(int)
     valid_indices = set(df_csi["absoluteIndex"]).intersection(set(df_fps.columns))
-    filtered_df_fps = df_fps[list(valid_indices)]
-    filtered_df_fps.columns = [str(col).zfill(4) for col in filtered_df_fps.columns]
+    df_fps_filtered = df_fps[list(valid_indices)]
+    df_fps_filtered.columns = [str(col).zfill(4) for col in df_fps_filtered.columns]
 
-    # Define the ranges of each fingerprint type
-    # This ranges are only informative and not used later on.
+    # Ranges of each fingerprint type (only informative)
     openbabel_fp3_range = range(0, 55)
     openbabel_fp4_range = range(55, 362)
     MACCS_range = range(369, 525)
@@ -248,21 +198,20 @@ def process_molecules(
     klekota_range = range(1409, 6267)
     print_info = (
         "The absoluteIndex from csi_fingerid.tsv file "
-        "are used as column names. Following fingerprints are generated:\n"
+        "is used as column names. The following fingerprints were generated:\n"
         f"openbabel_fp3 fingerprints (absoluteIndex range {openbabel_fp3_range.start} - {openbabel_fp3_range.stop - 1}),\n"
-        f"openbabel_fp4 (CDK Substructure in SIRIUS, absoluteIndex range {openbabel_fp4_range.start} - {openbabel_fp4_range.stop - 1}),\n"
-        f"MACCS (absoluteIndex range {MACCS_range.start} - {MACCS_range.stop - 1}),\n"
-        f"PubChem (absoluteIndex range {PubChem_range.start} - {PubChem_range.stop - 1}),\n"
-        f"Klekota-Roth (absoluteIndex range {klekota_range.start} - {klekota_range.stop - 1})."
+        f"openbabel_fp4 CDK Substructure in SIRIUS ({openbabel_fp4_range.start} - {openbabel_fp4_range.stop - 1}),\n"
+        f"MACCS ({MACCS_range.start} - {MACCS_range.stop - 1}),\n"
+        f"PubChem ({PubChem_range.start} - {PubChem_range.stop - 1}),\n"
+        f"Klekota-Roth ({klekota_range.start} - {klekota_range.stop - 1})."
     )
     print(print_info)
 
-    filtered_df_fps = filtered_df_fps.reset_index().rename(columns={"index": id})
-    filtered_df_fps = filtered_df_fps.sort_values(id)
+    df_fps_filtered = df_fps_filtered.reset_index().rename(columns={"index": id})
+    df_fps_filtered = df_fps_filtered.sort_values(id)
     if store_as_csv:
-        filtered_df_fps.to_csv(fps_output_path, index=False)
+        df_fps_filtered.to_csv(fps_output_path, index=False)
     else:
-        filtered_df_fps.to_parquet(fps_output_path, index=False)
+        df_fps_filtered.to_parquet(fps_output_path, index=False)
 
-    print("The shape of the final data frame with fingerprints:")
-    print(filtered_df_fps.shape)
+    print(f"Final dataframe with {df_fps_filtered.shape[1]} true SIRIUS fingerprint bits for {df_fps_filtered.shape[0]} entries (stored as {fps_output_path})")
