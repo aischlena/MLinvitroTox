@@ -215,6 +215,6 @@ def sort_by_aeid_and_chem_id(df):
 
 def sort_by_column(df, col):
     df["sort"] = df[col].str.split("_", expand=True)[0].astype("int")
-    df = df.sort_values(["sort"])
+    df = df.sort_values(["sort", col])
     df = df.drop(columns=["sort"])
     return df
