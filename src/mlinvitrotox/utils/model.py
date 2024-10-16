@@ -72,6 +72,12 @@ class Model:
         df_assay_info["aeid"] = df_assay_info["aeid"].astype("str")
         self.df_assay_info = df_assay_info
 
+        # load metrics file
+        metrics_path = get_path("modeltraining_metrics.csv")
+        df_metrics = pd.read_csv(metrics_path)
+        df_metrics["aeid"] = df_metrics["aeid"].astype("int")
+        self.df_metrics = df_metrics.sort_values("aeid")
+
     def download(self, model_name: str):
         url = self.model_repo + "/" + str(model_name) + ".itox"
         appdir = Path(click.get_app_dir("mlinvitrotox"))
@@ -299,3 +305,6 @@ class Model:
                 zipf.writestr("selected_aeids.csv", csv_buffer.getvalue())
         else:
             raise RuntimeError(f"Unkown model file {self.model_path}")
+
+    def copy_metrics(self):
+        pass

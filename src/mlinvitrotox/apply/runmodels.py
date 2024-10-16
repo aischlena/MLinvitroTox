@@ -48,19 +48,22 @@ def run_models(input_file, model, id, output_folder):
     df_predfps = predict.load_application_data(input_file, id)
     df_predfps.set_index("chem_id", inplace=True)
 
-    # Collect predictions for each aeid
+    # collect predictions for each aeid
     df_predictions = model_instance.predict(df_predfps)
 
-    # set file name for predictions output file
+    # save predictions
     output_predictions_file = output_folder / f"{model_path.stem}_predictions.csv"
-
-    # Save predictions
     try:
         df_predictions = predict.sort_by_aeid_and_chem_id(df_predictions)
     except:
         print("The predictions dataframe was not sorted.")
     df_predictions.round(5).to_csv(output_predictions_file, index=False)
     print(f"Predictions stored to {output_predictions_file}")
+
+    # copy metrics file from model to output folder
+    output_metrics_file = output_folder / "modeltraining_metrics.csv"
+    model_instance.df_metrics.to_csv(output_metrics_file, index=False)
+    print(f"Model training metrics copied to {output_metrics_file}")
 
 
 if __name__ == "__main__":
