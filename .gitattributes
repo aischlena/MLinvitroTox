@@ -8,3 +8,4 @@ data/processed/chemical_fingerprints/intermediate/*sdf filter=lfs diff=lfs merge
 data/processed/hrms_massbank/massbank_published-data_complete.csv filter=lfs diff=lfs merge=lfs -text
 data/processed/hrms_massbank/massbank_published-data_smiles.csv filter=lfs diff=lfs merge=lfs -text
 data/processed/hrms_massbank/massbank_validation_predfps_dtxsid.csv filter=lfs diff=lfs merge=lfs -text
+model_log/modelfitting.log filter=lfs diff=lfs merge=lfs -text
