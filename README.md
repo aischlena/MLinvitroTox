@@ -26,18 +26,18 @@ pip install mlinvitrotox
 
 ## C. Example / Usage
 
-Have a look at the [tutorial](https://renkulab.io/projects/expectmine/mlinvitrotox-tutorial). 
+Have a look at the [tutorial](https://github.com/aischlena/mlinvitrotox-tutorial). 
 
 MLinvitroTox will work with SIRIUS output up to [v5.8.6](https://github.com/bright-giant/sirius/releases/tag/v5.8.6), but not the latest release v6.0.4 (work in progress).
 
 
 ## D. Development
 
-If you are interested in the project and the package, please reach out to <lilian.gasser@sdsc.ethz.ch>.
+If you are interested in the project and the package, please reach out to <lena.aisch@eawag.ch> or <lilian.gasser@sdsc.ethz.ch>.
 
 
 ## References
-- Arturi et al. (2024) "MLinvitroTox reloaded for high-throughput hazard-based prioritization of HRMS data." (In preparation).
+- Arturi, K., Harris, E.J., Gasser, L. et al. MLinvitroTox reloaded for high-throughput hazard-based prioritization of high-resolution mass spectrometry data. J Cheminform 17, 14 (2025). https://doi.org/10.1186/s13321-025-00950-4
 - Arturi, Katarzyna, and Juliane Hollender. "Machine learning-based hazard-driven prioritization of features in nontarget screening of environmental high-resolution mass spectrometry data." Environmental Science & Technology 57, no. 46 (2023): 18067-18079.
 - Dührkop, Kai, Markus Fleischauer, Marcus Ludwig, Alexander A. Aksenov, Alexey V. Melnik, Marvin Meusel, Pieter C. Dorrestein, Juho Rousu, and Sebastian Böcker. "SIRIUS 4: a rapid tool for turning tandem mass spectra into metabolite structure information." Nature methods 16, no. 4 (2019): 299-302.
 - Abedini, Jaleh, Bethany Cook, Shannon Bell, Xiaoqing Chang, Neepa Choksi, Amber B. Daniel, David Hines et al. "Application of new approach methodologies: ICE tools to support chemical evaluations." Computational Toxicology 20 (2021): 100184.
