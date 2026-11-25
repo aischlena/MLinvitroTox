@@ -10,6 +10,7 @@ from datetime import datetime
 import joblib
 import yaml
 from tqdm import tqdm
+import math
 
 import numpy as np
 import pandas as pd
@@ -17,13 +18,16 @@ import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
 
-from sklearn.pipeline import Pipeline
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.pipeline import Pipeline
+
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectFromModel
+
+#from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 from xgboost import XGBClassifier  # needed for build_pipeline()
-# from sklearn.linear_model import LogisticRegression
-# from sklearn.svm import SVC
-# from sklearn.neural_network import MLPClassifier
-# from sklearn.ensemble import RandomForestClassifier
 
 from mlinvitrotox.constants import (
     # IDs
@@ -34,28 +38,6 @@ from mlinvitrotox.constants import (
 matplotlib.use("Agg")
 
 LOGGER = logging.getLogger(__name__)
-
-
-def empty_pytcpl_input_directory(
-    pytcpl_input_folder,
-):
-    for filename in os.listdir(pytcpl_input_folder):
-        file_path = Path(pytcpl_input_folder) / filename
-        if os.path.isfile(file_path):
-            os.unlink(file_path)
-        elif os.path.isdir(file_path):
-            shutil.rmtree(file_path)
-
-
-def copy_pytcpl_parquet_files(
-    remote_pytcpl_folder,
-    pytcpl_input_folder,
-):
-    for filename in os.listdir(remote_pytcpl_folder):
-        if filename.endswith(".parquet.gzip"):
-            parquet_path = Path(remote_pytcpl_folder) / filename
-            shutil.copy2(parquet_path, pytcpl_input_folder)
-            print(f"Copied {parquet_path} to {pytcpl_input_folder}")
 
 
 def load_config(config_path, logs_folder):
@@ -102,11 +84,13 @@ def init_ml_algo(ml_algorithm, config_models_path):
 
     # store config models file in log folder
     config_models_file = config_models_path.split("/")[-1]
+    log_config_path = os.path.join(LOGGER_FOLDER, config_models_file)
+    os.makedirs(os.path.dirname(log_config_path), exist_ok=True)
     with open(os.path.join(LOGGER_FOLDER, config_models_file), "w") as file:
         yaml.dump(config_estimators, file)
 
     # create dump folder
-    DUMP_FOLDER = os.path.join(LOG_PATH, TARGET_VARIABLE, str(ml_algorithm))
+    DUMP_FOLDER = os.path.join(LOG_PATH, str(ml_algorithm))
     os.makedirs(DUMP_FOLDER, exist_ok=True)
 
     return config_estimators
@@ -116,21 +100,18 @@ def init_aeid(aeid):
     global AEID, DUMP_FOLDER
     AEID = str(aeid)
     DUMP_FOLDER = os.path.join(
-        str(LOG_PATH), str(TARGET_VARIABLE), str(ML_ALGORITHM), str(AEID)
+        str(LOG_PATH), str(ML_ALGORITHM), str(AEID)
     )
     os.makedirs(DUMP_FOLDER, exist_ok=True)
 
 
 def init_preprocessing_pipeline(preprocessing_pipeline):
     global PREPROCESSING_PIPELINE, DUMP_FOLDER
-    preprocessing_pipeline_name = preprocessing_pipeline[
-        -1
-    ].estimator.__class__.__name__
-    PREPROCESSING_PIPELINE = f"Feature_Selection_{preprocessing_pipeline_name}"
+    preprocessing_pipeline_name = 'RandomForest'
+    PREPROCESSING_PIPELINE = f"FS_{preprocessing_pipeline_name}" #FS: Feature Selection
     LOGGER.info(f"Apply {PREPROCESSING_PIPELINE}..")
     DUMP_FOLDER = os.path.join(
         str(LOG_PATH),
-        str(TARGET_VARIABLE),
         str(ML_ALGORITHM),
         str(AEID),
         str(PREPROCESSING_PIPELINE),
@@ -144,7 +125,6 @@ def init_estimator_pipeline(estimator_name):
     ESTIMATOR_PIPELINE = estimator_name
     DUMP_FOLDER = os.path.join(
         str(LOG_PATH),
-        str(TARGET_VARIABLE),
         str(ML_ALGORITHM),
         str(AEID),
         str(PREPROCESSING_PIPELINE),
@@ -160,11 +140,10 @@ def init_validation_set(validation_set):
     LOGGER.info(f"Validation Set: {VALIDATION_SET}")
     DUMP_FOLDER = os.path.join(
         str(LOG_PATH),
-        str(TARGET_VARIABLE),
         str(ML_ALGORITHM),
         str(AEID),
         str(PREPROCESSING_PIPELINE),
-        str(ESTIMATOR_PIPELINE),
+        #str(ESTIMATOR_PIPELINE),
         str(VALIDATION_SET),
     )
     os.makedirs(DUMP_FOLDER, exist_ok=True)
@@ -302,10 +281,7 @@ def select_aeids_for_training(
 
 
 def get_fingerprint_df(fps_input_file):
-    if isinstance(fps_input_file, Path) and fps_input_file.suffix == ".csv":
-        fps_df = pd.read_csv(fps_input_file)
-    else:
-        fps_df = pd.read_parquet(fps_input_file)
+    fps_df = pd.read_csv(fps_input_file)
 
     integer_columns = [col for col in fps_df.columns if col.isdigit()]
     fps_df[integer_columns] = fps_df[integer_columns].astype(int)
@@ -333,7 +309,7 @@ def process_single_aeid(
         print(f"File not found: {file_path}")
         return None
     df = pd.read_parquet(file_path)
-
+    
     # apply ice omit filtering
     # (entries with NA are to be kept)
     if ice_omit_filtering:
@@ -367,7 +343,7 @@ def process_single_aeid(
     df_selected.loc[:, target_variable] = (
         df_selected[target_variable] >= activity_threshold
     ).astype(int)
-
+        
     # merge entries for duplicate dsstox entries
     # TODO do we have duplicate dsstox entries?
     n_before = df_selected.shape[0]
@@ -386,6 +362,7 @@ def process_single_aeid(
 def merge_assay_and_fingerprint_df(assay_df, fps_df, selected_chemicals_file=None):
     assert CHEM_ID in assay_df.columns, f"No '{CHEM_ID}' column found in assay_df"
     assert CHEM_ID in fps_df.columns, f"No '{CHEM_ID}' column found in fps_df"
+    fps_df = fps_df.drop_duplicates(subset=CHEM_ID)
     merged_df = pd.merge(
         assay_df,
         fps_df,
@@ -422,6 +399,7 @@ def cluster_threshold_all(
     kmeans = KMeans(n_clusters=n_clusters, random_state=random_state).fit(
         clustering_features
     )
+    df = df.copy()
     df["Cluster"] = kmeans.labels_
     return df.reset_index()
 
@@ -465,67 +443,122 @@ def clustering(
     return combined_df
 
 
-def filter_with_sirius_quality_indexes(
-    df,
-    indexes_path,
-    target_variable,
-):
-    # load selected indexes
-    indexes_df = pd.read_csv(indexes_path)
-    col_name = indexes_df.columns[0]
-    indexes_df = indexes_df.sort_values(col_name).drop_duplicates()
+def stratified_exact_n(df, total_n, group_col, random_state=42):
+    # group sizes
+    g = df.groupby(group_col)
+    sizes = g.size()
 
-    # convert to string with 4 characters
-    if indexes_df["absoluteIndex"].dtype == np.int64:
-        filter_indexes = indexes_df["absoluteIndex"].tolist()
-    else:
-        filter_indexes = indexes_df["absoluteIndex"].astype(str).tolist()
-    filter_columns = [str(index).zfill(4) for index in filter_indexes]
+    # ideal proportional allocation
+    ideal = sizes / sizes.sum() * total_n
 
-    # add other entries and filter
-    filter_columns = filter_columns + [CHEM_ID, target_variable, "clustering_rule"]
-    filtered_df = df[filter_columns].copy()
+    # base allocation by floor
+    base = ideal.apply(math.floor)
+    remainder = total_n - base.sum()
 
-    return filtered_df
+    # assign remaining slots to clusters with largest fractional part
+    frac_part = (ideal - base)
+    extra_clusters = frac_part.sort_values(ascending=False).head(remainder).index
+
+    allocation = base.copy()
+    allocation.loc[extra_clusters] += 1
+
+    # now sample
+    sampled = []
+    for cluster, group_df in g:
+        n = min(allocation.loc[cluster], len(group_df))
+        if n > 0:
+            sampled.append(group_df.sample(n=n, random_state=42))
+    return pd.concat(sampled)
 
 
-def split_training_validation_data(
+def split_training_test_data(
     filtered_df,
-    pred_fps_df,
+    pred_fps_df_pos,
+    pred_fps_df_neg,
     target_variable,
 ):
     # get DTXSID in both data frames --> validation
     filtered_df_dtxsid = filtered_df[[CHEM_ID]]
-    pred_fps_df_dtxsid = pred_fps_df[[CHEM_ID]]
-    dtxsid_val = set(filtered_df_dtxsid[CHEM_ID]).intersection(
-        set(pred_fps_df_dtxsid[CHEM_ID])
+    pred_fps_df_dtxsid_pos = pred_fps_df_pos[[CHEM_ID]]
+    pred_fps_df_dtxsid_neg = pred_fps_df_neg[[CHEM_ID]]
+    dtxsid_val_pos = set(filtered_df_dtxsid[CHEM_ID]).intersection(
+        set(pred_fps_df_dtxsid_pos[CHEM_ID])
     )
+    dtxsid_val_neg = set(filtered_df_dtxsid[CHEM_ID]).intersection(
+        set(pred_fps_df_dtxsid_neg[CHEM_ID])
+    )
+
+    # Sample only 15% of the overlapping chemicals using cluster-based stratified sampling
+    filtered_val_df_pos = filtered_df[filtered_df[CHEM_ID].isin(dtxsid_val_pos)]
+    filtered_val_df_neg = filtered_df[filtered_df[CHEM_ID].isin(dtxsid_val_neg)]
+
+    #    Ensure cluster column is present
+    assert "clustering_rule" in filtered_val_df_pos.columns, "Missing 'cluster' column for stratified sampling in positive mode."
+    assert "clustering_rule" in filtered_val_df_neg.columns, "Missing 'cluster' column for stratified sampling in negative mode."
+
+    # Sample 15% stratified by cluster
+    # target number of validation samples for pos, based on size of training set
+    n_val = int(len(filtered_df) * 0.15)
+
+    sampled_val_df_pos = stratified_exact_n(
+        filtered_val_df_pos,
+        total_n=n_val,
+        group_col="clustering_rule",
+        random_state=42
+    ).assign(ion_mode="pos")
+
+    
+    sampled_val_df_neg = stratified_exact_n(
+        filtered_val_df_neg,
+        total_n=n_val,
+        group_col="clustering_rule",
+        random_state=42
+    ).assign(ion_mode="neg")
+
+    sampled_val_df = pd.concat([sampled_val_df_pos, sampled_val_df_neg], ignore_index=True)
+
+    # Get sampled DTXSIDs only
+    dtxsid_val_sampled = set(sampled_val_df[CHEM_ID])
+    dtxsid_val_sampled_pos = set(sampled_val_df[sampled_val_df["ion_mode"] == "pos"][CHEM_ID])
+    dtxsid_val_sampled_neg = set(sampled_val_df[sampled_val_df["ion_mode"] == "neg"][CHEM_ID])
+
+    # save the test set chemicals
+    pd.Series(sorted(dtxsid_val_sampled)).to_csv(Path(DUMP_FOLDER) / f"test_true_chemicals.csv", index=False)
+    pd.Series(sorted(dtxsid_val_sampled_pos)).to_csv(Path(DUMP_FOLDER) / f"test_pos_chemicals.csv", index=False)
+    pd.Series(sorted(dtxsid_val_sampled_neg)).to_csv(Path(DUMP_FOLDER) / f"test_neg_chemicals.csv", index=False)
+
     # get DTXSIDs not shared in data frames --> training and test
-    dtxsis_train_test = set(filtered_df_dtxsid[CHEM_ID]).difference(
-        set(pred_fps_df_dtxsid[CHEM_ID])
-    )
-    df_validation_true = filtered_df[filtered_df[CHEM_ID].isin(dtxsid_val)]
-    df_validation_pred = pred_fps_df[pred_fps_df[CHEM_ID].isin(dtxsid_val)]
-    df_train_test = filtered_df[filtered_df[CHEM_ID].isin(dtxsis_train_test)]
+    dtxsid_train = set(filtered_df_dtxsid[CHEM_ID]).difference(dtxsid_val_sampled)
+
+    df_validation_true = filtered_df[filtered_df[CHEM_ID].isin(dtxsid_val_sampled)]
+    df_validation_pred_pos = pred_fps_df_pos[pred_fps_df_pos[CHEM_ID].isin(dtxsid_val_sampled_pos)].copy()
+    df_validation_pred_neg = pred_fps_df_neg[pred_fps_df_neg[CHEM_ID].isin(dtxsid_val_sampled_neg)].copy()
+    df_validation_pred_pos["ion_mode"] = "pos"
+    df_validation_pred_neg["ion_mode"] = "neg"
+    df_validation_pred = pd.concat([df_validation_pred_pos, df_validation_pred_neg], ignore_index=True)
+    df_train = filtered_df[filtered_df[CHEM_ID].isin(dtxsid_train)]
+
     print(f"df_validation_true {df_validation_true.shape}")
     print(f"df_validation_pred {df_validation_pred.shape}")
-    print(f"df_train_test {df_train_test.shape}")
-    print(f"df_train_test columns {df_train_test.columns}")
+    print(f"df_train {df_train.shape}")
+    print(f"df_train columns {df_train.columns}")
 
     # only keep common columns for predicted validation data frame
-    common_columns = df_validation_pred.columns.intersection(df_validation_true.columns)
+    common_columns = df_validation_pred.columns.intersection(df_validation_true.columns).tolist()
+    if "ion_mode" in df_validation_pred.columns and "ion_mode" not in common_columns:
+        common_columns.append("ion_mode")
     df_validation_pred = df_validation_pred.loc[:, common_columns]
 
     # perform checks
     columns_training_test = set(
         col
-        for col in df_train_test.columns
+        for col in df_train.columns
         if col != target_variable and "cluster" not in col.lower()
     )
     columns_validation_pred = set(
         col
         for col in df_validation_pred.columns
-        if col != target_variable and "cluster" not in col.lower()
+        if col != target_variable and "cluster" and "ion_mode" not in col.lower()
     )
     columns_validation_true = set(
         col
@@ -557,31 +590,31 @@ def split_training_validation_data(
     print(f"DTXSID duplicates in df_validation_true: {duplicates_true_exist}")
     duplicates_pred_exist = df_validation_pred[CHEM_ID].duplicated().any()
     print(f"DTXSID duplicates in df_validation_pred: {duplicates_pred_exist}")
-    return df_train_test, df_validation_true, df_validation_pred
+    return df_train, df_validation_true, df_validation_pred
 
 
 def partition_training_data(
-    df_train_test,
+    df_train,
     target_variable,
 ):
     # get feature_names
     feature_names = [
-        col for col in df_train_test.columns if col.isdigit() and col != CHEM_ID
+        col for col in df_train.columns if col.isdigit() and col != CHEM_ID
     ]
 
     # set DTXSID as index
-    if CHEM_ID in df_train_test.columns:
-        df_train_test = df_train_test.set_index(CHEM_ID).sort_index()
+    if CHEM_ID in df_train.columns:
+        df_train = df_train.set_index(CHEM_ID).sort_index()
 
     # get X, y, and clustering rule for stratification
-    X = df_train_test[feature_names]
-    y = df_train_test[target_variable]  # .astype(np.uint8)
-    cluster = df_train_test["clustering_rule"]
+    X = df_train[feature_names]
+    y = df_train[target_variable]  # .astype(np.uint8)
+    cluster = df_train["clustering_rule"]
 
     return X, y, cluster, feature_names
 
 
-def partition_validation_data(
+def partition_test_data(
     df_validation_true,
     df_validation_pred,
     target_variable,
@@ -593,58 +626,32 @@ def partition_validation_data(
     if CHEM_ID in df_validation_pred.columns:
         df_validation_pred = df_validation_pred.set_index(CHEM_ID).sort_index()
 
-    # get X and y
+    # structure features and full y
     X_mbval_structure = df_validation_true[feature_names]
-    X_mbval_sirius = df_validation_pred[feature_names]
-    y_mbval = df_validation_true[target_variable].astype(np.uint8)
+    y_mbval_structure = df_validation_true[target_variable].astype(np.uint8)
+
+    if "ion_mode" not in df_validation_pred.columns:
+        raise ValueError("Expected 'ion_mode' column in df_validation_pred.")
+
+    # split pred by mode
+    df_pred_pos = df_validation_pred[df_validation_pred["ion_mode"] == "pos"]
+    df_pred_neg = df_validation_pred[df_validation_pred["ion_mode"] == "neg"]
+
+    # match labels to features by index
+    X_mbval_sirius_pos = df_pred_pos[feature_names]
+    y_mbval_pos = df_validation_true.loc[df_pred_pos.index, target_variable].astype(np.uint8)
+
+    X_mbval_sirius_neg = df_pred_neg[feature_names]
+    y_mbval_neg = df_validation_true.loc[df_pred_neg.index, target_variable].astype(np.uint8)
 
     return (
         X_mbval_structure,
-        X_mbval_sirius,
-        y_mbval,
+        y_mbval_structure,
+        X_mbval_sirius_pos,
+        y_mbval_pos,
+        X_mbval_sirius_neg,
+        y_mbval_neg,
     )
-
-
-def split_training_data(
-    X,
-    y,
-    cluster,
-    train_test_split_ratio,
-    random_state,
-):
-    from sklearn.model_selection import train_test_split
-
-    # get single member clusters
-    cluster_counts = cluster.value_counts()
-    single_member_clusters = cluster_counts[cluster_counts == 1].index
-    single_member_indices = [
-        cluster[cluster == i].index[0] for i in single_member_clusters
-    ]
-    X_single = X[X.index.isin(single_member_indices)]
-    y_single = y[y.index.isin(single_member_indices)]
-    X_multiple = X[~X.index.isin(single_member_indices)]
-    y_multiple = y[~y.index.isin(single_member_indices)]
-    cluster_multiple = cluster[~cluster.index.isin(single_member_indices)]
-    print(X.shape, X_single.shape, y.shape, y_single.shape)
-    print(X.shape, X_multiple.shape, y.shape, y_multiple.shape)
-
-    # stratify multiple clusters data
-    stratify = cluster_multiple
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_multiple,
-        y_multiple,
-        test_size=train_test_split_ratio,
-        random_state=random_state,
-        shuffle=True,  # shuffle the data before splitting (default)
-        stratify=stratify,
-    )
-
-    # add single clusters to training data
-    X_train = pd.concat([X_train, X_single], ignore_index=True)
-    y_train = pd.concat([y_train, y_single], ignore_index=True)
-    print(X_train.shape, y_train.shape, X_test.shape, y_test.shape)
-
-    return X_train, y_train, X_test, y_test
 
 
 def handle_oversampling(
@@ -682,11 +689,7 @@ def build_preprocessing_pipeline(
     remove_highcorrelation_features,
     variance_threshold,
     correlation_threshold,
-    random_state,
 ):
-    from sklearn.feature_selection import VarianceThreshold
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.feature_selection import SelectFromModel
 
     preprocessing_pipeline_steps = []
     if feature_selection:
@@ -712,16 +715,6 @@ def build_preprocessing_pipeline(
                 )
             )
 
-        feature_selection_model = RandomForestClassifier(random_state=random_state)
-
-        feature_selection_from_model = SelectFromModel(
-            estimator=feature_selection_model, threshold="mean"
-        )
-
-        preprocessing_pipeline_steps.append(
-            ("feature_selection_from_model", feature_selection_from_model)
-        )
-
     preprocessing_pipeline = Pipeline(preprocessing_pipeline_steps)
     LOGGER.info("Built Preprocessing pipeline (feature selection)")
     return [preprocessing_pipeline]
@@ -729,52 +722,45 @@ def build_preprocessing_pipeline(
 
 def preprocess_all_sets(
     preprocessing_pipeline,
-    feature_names,
-    X_train_os,
-    y_train_os,
     X_train,
-    X_test,
+    y_train,
     X_mbval_structure,
-    X_mbval_sirius,
+    X_mbval_sirius_pos,
+    X_mbval_sirius_neg,
 ):
+    
+    feature_names = None
     # Feature selection fitted on train set. Transform all sets with the same feature selection
     if preprocessing_pipeline.steps:
-        X_train_os = preprocessing_pipeline.fit_transform(
-            X_train_os,
-            y_train_os,
+        X_train = preprocessing_pipeline.fit_transform(
+            X_train,
+            y_train,
         )
 
-        num_features = X_train_os.shape[1]
+        if hasattr(preprocessing_pipeline, "get_feature_names_out"):
+            feature_names = preprocessing_pipeline.get_feature_names_out()
+        else:
+            raise ValueError(
+                "preprocessing_pipeline does not support get_feature_names_out()"
+            )
+        num_features = X_train.shape[1]
         LOGGER.info(f"Number of selected features: {num_features}")
 
-        # Get the selected feature indices and then names
-        selected_feature_indices = preprocessing_pipeline[-1].get_support()
-        selected_feature_names = [
-            feature_names[i]
-            for i, selected in enumerate(selected_feature_indices)
-            if selected
-        ]
-        selected_feature_df = pd.DataFrame(selected_feature_names, columns=["feature"])
-        selected_feature_df.to_csv(
-            Path(DUMP_FOLDER) / "selected_features.csv", index=False
-        )
-
-        # Transform other sets (e.g. subselect feature columns that were selected by the feature selection model)
-        X_train = preprocessing_pipeline.transform(X_train)
-        X_test = preprocessing_pipeline.transform(X_test)
+        # Transform other sets (e.g. subselect feature columns that were selected by the feature selection model
         X_mbval_structure = preprocessing_pipeline.transform(X_mbval_structure)
-        X_mbval_sirius = preprocessing_pipeline.transform(X_mbval_sirius)
+        X_mbval_sirius_pos = preprocessing_pipeline.transform(X_mbval_sirius_pos)
+        X_mbval_sirius_neg = preprocessing_pipeline.transform(X_mbval_sirius_neg)
 
         # Assert that all sets have the same features
         if (
             num_features != X_train.shape[1]
-            or num_features != X_test.shape[1]
             or num_features != X_mbval_structure.shape[1]
-            or num_features != X_mbval_sirius.shape[1]
+            or num_features != X_mbval_sirius_pos.shape[1]
+            or num_features != X_mbval_sirius_neg.shape[1]
         ):
             LOGGER.error(
                 f"Number of features in train, test, mbval_structure, mbval_sirius do not match: "
-                f"{num_features}, {X_train.shape[1]}, {X_test.shape[1]}, {X_mbval_structure.shape[1]}, {X_mbval_sirius.shape[1]}"
+                f"{num_features}, {X_train.shape[1]}, {X_mbval_structure.shape[1]}, {X_mbval_sirius_pos.shape[1]}, {X_mbval_sirius_neg.shape[1]}"
             )
             raise RuntimeError("Error in feature selection")
 
@@ -783,12 +769,11 @@ def preprocess_all_sets(
     joblib.dump(preprocessing_pipeline, preprocessing_model_path, compress=3)
 
     return (
-        selected_feature_names,
-        X_train_os,
         X_train,
-        X_test,
         X_mbval_structure,
-        X_mbval_sirius,
+        X_mbval_sirius_pos,
+        X_mbval_sirius_neg,
+        feature_names
     )
 
 
@@ -821,11 +806,51 @@ def build_pipeline(estimator, random_state):
             **step_args
         )  # dynmically create an instance of the step
         pipeline_steps.append((step_name, step_instance))
+    
+    # RandomForest feature selection
+    feature_selection_model = RandomForestClassifier(random_state=random_state)
+    pipeline_steps.insert(-1, ("feature_selection", SelectFromModel(estimator=feature_selection_model, threshold="mean")))
+
+    # Oversampling train set
+    pipeline_steps.insert(-1, ("oversample", RandomOverSampler(random_state=random_state)))
 
     pipeline = Pipeline(pipeline_steps)
     LOGGER.info("=" * 100 + "\n")
     LOGGER.info(f"Built Pipeline for {ESTIMATOR_PIPELINE}")
     return pipeline
+
+
+
+def save_selected_features(best_estimator, feature_names):
+    # Check that feature_selection is in the pipeline
+    if "feature_selection" not in best_estimator.named_steps:
+        raise ValueError("Pipeline does not contain a 'feature_selection' step.")
+
+    # Get support mask
+    selector = best_estimator.named_steps["feature_selection"]
+
+    if not hasattr(selector, "get_support"):
+        raise ValueError("feature_selection does not support get_support()")
+
+    mask = selector.get_support()
+
+    if len(feature_names) != len(mask):
+        raise ValueError(
+            f"Length mismatch: {len(feature_names)} feature names vs "
+            f"{len(mask)} selector mask"
+        )
+
+    # Map mask to feature names
+    selected_features = [
+        f for f, keep in zip(feature_names, mask) if keep
+    ]
+
+    pd.DataFrame({"feature": selected_features}).to_csv(
+        Path(DUMP_FOLDER) / "selected_features.csv",
+        index=False
+    )
+
+    return selected_features
 
 
 def build_param_grid(estimator_steps):
@@ -858,9 +883,9 @@ def perform_grid_search_cv(
         pipeline,
         param_grid=build_param_grid(estimator["steps"]),
         cv=cv,
-        scoring=None,
+        scoring="balanced_accuracy",
         n_jobs=-1,
-        verbose=3,
+        verbose=0,
     )
 
     # Use train set as input to Grid Search Cross Validation
@@ -872,7 +897,7 @@ def perform_grid_search_cv(
         grid_search_cv.best_params_ if grid_search_cv.best_params_ else "default"
     )
     LOGGER.info(f"Best params: {best_params}")
-    LOGGER.info(f"With scorer=None: {grid_search_cv.best_score_}")
+    LOGGER.info(f"With scorer: {grid_search_cv.best_score_}")
 
     return grid_search_cv
 
@@ -928,7 +953,8 @@ def find_optimal_threshold_roc(
         alpha=0.8,
         color="black",
         zorder=2,
-        label=f"{ESTIMATOR_PIPELINE}",
+        label=f"TabPFN",
+        #label=f"{ESTIMATOR_PIPELINE}",
     )
 
     # No-Skill classifier
@@ -1028,76 +1054,6 @@ def find_optimal_threshold_roc(
         return None, None, None
 
 
-def plot_precision_recall_curve(
-    y,
-    y_pred_proba,
-    default_threshold,
-):
-    from sklearn.metrics import precision_recall_curve
-
-    # get precision recall curve
-    prec, recall, thresholds_pr = precision_recall_curve(y, y_pred_proba)
-    #    thresholds_pr = np.append(thresholds_pr, thresholds_pr[-1])
-
-    # create dataframe
-    df_pr = pd.DataFrame(
-        {"Precision": prec[:-1], "Recall": recall[:-1], "Threshold": thresholds_pr}
-    )
-    idx_default = np.argmin(np.abs(thresholds_pr - default_threshold))
-
-    # generate curve
-    plt.figure(figsize=(8, 8))
-    fontsize = 12
-    plt.scatter(
-        df_pr["Recall"], df_pr["Precision"], s=5, alpha=0.8, color="black", zorder=2
-    )
-
-    plt.plot(
-        df_pr["Recall"],
-        df_pr["Precision"],
-        linestyle="-",
-        alpha=0.8,
-        color="black",
-        zorder=2,
-        label=f"{ESTIMATOR_PIPELINE}",
-    )
-
-    # No-Skill classifier
-    npos_rel = len(y[y == 1]) / len(y)
-    plt.plot(
-        [0, 1],
-        [npos_rel, npos_rel],
-        linestyle="--",
-        color="gray",
-        alpha=0.8,
-        label="No-skill classifier",
-    )
-
-    # Highlight thresholds point
-    plt.scatter(
-        recall[idx_default],
-        prec[idx_default],
-        alpha=0.8,
-        color="blue",
-        s=120,
-        marker="o",
-        label=f'"Default" threshold: {default_threshold}',
-    )
-
-    plt.legend(fontsize=fontsize, loc="lower left", framealpha=0.6)
-    plt.xlim(-0.01, 1)
-    plt.ylim(0, 1.01)
-    plt.xlabel("Recall", fontsize=fontsize + 2)
-    plt.ylabel("Precision", fontsize=fontsize + 2)
-    plt.xticks(fontsize=fontsize - 1)
-    plt.yticks(fontsize=fontsize - 1)
-    plt.title(f"aeid: {AEID}", fontsize=fontsize + 3)
-
-    plt.grid()
-    plt.tight_layout()
-
-    plt.savefig(Path(DUMP_FOLDER) / "pr_curve.svg", format="svg")
-    plt.close("all")
 
 
 def predict_and_report_classification(
@@ -1127,6 +1083,8 @@ def predict_and_report_classification(
 
     # Get the prediction probabilites
     y_pred_proba = best_estimator.predict_proba(X)[:, 1]
+    print("Mean predicted probability:", y_pred_proba.mean())
+    print("Range:", (y_pred_proba.min(), y_pred_proba.max()))
 
     # Get the predictions for the default threshold
     LOGGER.info(f"Default threshold: {default_threshold}")
@@ -1178,11 +1136,11 @@ def predict_and_report_classification(
     y_preds_descs = [f"Classification Threshold default={default_threshold}"]
 
     # Precision recall curve
-    plot_precision_recall_curve(
-        y,
-        y_pred_proba,
-        default_threshold=default_threshold,
-    )
+    #plot_precision_recall_curve(
+    #    y,
+    #    y_pred_proba,
+    #    default_threshold=default_threshold,
+    #)
 
     # Adjust predictions based on classification threshold
     # ROC curve
@@ -1204,41 +1162,27 @@ def predict_and_report_classification(
     LOGGER.info(f"Fixed threshold TPR≈{target_tpr}: {fixed_threshold_tpr}")
     LOGGER.info(f"Fixed threshold, TNR≈{target_tnr}: {fixed_threshold_tnr}")
 
+    ## I only chose to visualize the y optimal because I have no use for tps tnr right now
     if threshold_moving:
+    # Only use optimal threshold
         y_pred_optimal_threshold = np.where(y_pred_proba >= optimal_threshold, 1, 0)
-        y_pred_fixed_threshold_tpr = np.where(y_pred_proba >= fixed_threshold_tpr, 1, 0)
-        y_pred_fixed_threshold_tnr = np.where(y_pred_proba >= fixed_threshold_tnr, 1, 0)
 
-        y_preds += [
-            y_pred_optimal_threshold,
-            y_pred_fixed_threshold_tpr,
-            y_pred_fixed_threshold_tnr,
-        ]
-        y_preds_names += ["optimal", "tpr", "tnr"]
-        y_preds_descs += [
-            "Classification Threshold by cost(TPR, TNR)",
-            f"Classification Threshold by TPR≈{target_tpr}",
-            f"Classification Threshold by TNR≈{target_tnr}",
-        ]
+        y_preds += [y_pred_optimal_threshold]
+        y_preds_names += ["optimal"]
+        y_preds_descs += ["Classification Threshold by cost(TPR, TNR)"]
 
-        new_data = {
+        data.update({
             "Prediction Optimal": y_pred_optimal_threshold,
-            "Prediction TPR": y_pred_fixed_threshold_tpr,
-            "Prediction TNR": y_pred_fixed_threshold_tnr,
-        }
-        data.update(new_data)
-        # data = pd.DataFrame(data)
-
-    # df = pd.DataFrame(data)
-    # df.round(5).to_csv(os.path.join(DUMP_FOLDER, "estimator_results.csv"), index=False)
+        })
 
     # Confusion Matrix
-    labels = [True, False]
-    for i, y_pred in enumerate(y_preds):
+    #labels = [True, False] from Kasia
+    labels = [False, True] # from chatgpt
+
+    for y_pred, name, desc in zip(y_preds, y_preds_names, y_preds_descs):
         LOGGER.info("." * 40)
-        LOGGER.info(f"Predict {y_preds_names[i]}")
-        name = y_preds_names[i]
-        desc = y_preds_descs[i]
+        LOGGER.info(f"Predict {name}")  # Properly logs just "optimal"
+    
         report_dict = classification_report(
             y,
             y_pred,
@@ -1248,19 +1192,29 @@ def predict_and_report_classification(
         report_df = pd.DataFrame(report_dict).transpose()
         report_df.round(5).to_csv(Path(DUMP_FOLDER) / f"report_{name}.csv")
 
+        test_results_df = pd.DataFrame({
+            "y_true": y,
+            "y_pred": y_pred,
+        })
+        test_results_path = Path(DUMP_FOLDER) / f"test_predictions_{name}.csv"
+        test_results_df.to_csv(test_results_path, index=False)
+
+
         cm = confusion_matrix(
             y,
             y_pred,
             labels=labels,
         )
+        print("Confusion matrix order:", labels)
+        print(cm)
         tn, fp, fn, tp = cm.ravel()  # Extract values from confusion matrix
         LOGGER.info(f"Total: {len(y)} datapoints")
         LOGGER.info(f"Ground truth: {tp + fn} positive, {tn + fp} negative")
         LOGGER.info(f"Prediction: {tp + fp} positive, {tn + fn} negative")
 
         display_labels = {
-            "Positive": {"fontsize": 30},
             "Negative": {"fontsize": 30},
+            "Positive": {"fontsize": 30},
         }
 
         plt.figure(figsize=(8, 8))
@@ -1269,12 +1223,12 @@ def predict_and_report_classification(
         )
         cm_display.plot(cmap=cmap, colorbar=False)
 
-        pos_count = cm[0, 0] + cm[0, 1]
-        neg_count = cm[1, 0] + cm[1, 1]
+        pos_count = cm[1, 0] + cm[1, 1]
+        neg_count = cm[0, 0] + cm[0, 1]
 
         plt.suptitle(f"Confusion Matrix: {desc} ", fontsize=10)
         plt.title(
-            f"aeid: {AEID}, {ESTIMATOR_PIPELINE}, Count: {len(y)} (P:{pos_count}, N:{neg_count})",
+            f"aeid: {AEID}, Count: {len(y)} (P:{pos_count}, N:{neg_count})",
             fontsize=10,
         )
         plt.savefig(Path(DUMP_FOLDER) / f"cm_{name}.svg", format="svg")
@@ -1313,29 +1267,36 @@ def report_exception(exception, traceback_info, entitiy):
 
 def save_model(best_estimator, fit_set):
     best_estimator_path = Path(DUMP_FOLDER) / f"best_estimator_{fit_set}.joblib"
+    best_estimator_path.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Saving model to: {best_estimator_path}")
+    print(f"Absolute path: {best_estimator_path.resolve()}")
+    print(f"Path length: {len(str(best_estimator_path.resolve()))}")
+    print(f"Does parent exist? {best_estimator_path.parent.exists()}")
     joblib.dump(best_estimator, best_estimator_path, compress=3)
 
 
-def get_feature_importance_if_applicable(
-    best_estimator,
-    feature_names,
-):
-    best_estimator_model = best_estimator[
-        -1
-    ]  # best_estimator is the pipeline and the last step is the model itself
-    try:
-        feature_importances = best_estimator_model.feature_importances_
-        importance_df = pd.DataFrame(
-            {"feature": feature_names, "importances": feature_importances}
-        )
-        importance_df = importance_df.sort_values(by="importances", ascending=False)
-        importance_df.to_csv(
-            Path(DUMP_FOLDER) / "sorted_feature_importances.csv", index=False
-        )
+# for parameter tuning only
+def save_parameters(results_parameters):
+    results_parameter_path = Path(DUMP_FOLDER) / f"grid_search.csv"
+    results_parameter_path.parent.mkdir(parents=True, exist_ok=True)
+    results_parameters.to_csv(results_parameter_path, index= False)
 
-    except Exception:
-        feature_importances = None
-        LOGGER.error(f"Feature Importance not implemented for {ESTIMATOR_PIPELINE}")
+
+def get_feature_importance_if_applicable(
+    best_estimator, feature_names_after_preprocess
+):
+    selector = best_estimator.named_steps['feature_selection']
+    mask = selector.get_support()
+    selected_feature_names = feature_names_after_preprocess[mask]
+
+    best_estimator_model = best_estimator.named_steps['XGBClassifier']
+    feature_importances = best_estimator_model.feature_importances_   
+
+    importance_df = pd.DataFrame(
+        {"feature": selected_feature_names, "importances": feature_importances}
+    )
+    importance_df = importance_df.sort_values(by="importances", ascending=False)
+    importance_df.to_csv(Path(DUMP_FOLDER) / "sorted_feature_importances.csv", index=False)
 
 
 def _create_empty_log_file(filename):

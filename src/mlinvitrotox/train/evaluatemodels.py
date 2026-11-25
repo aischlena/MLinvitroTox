@@ -5,42 +5,31 @@ import click
 
 import pandas as pd
 
-import mlinvitrotox.utils.predict as predict
+import sys
 
-from mlinvitrotox.constants import (
-    # Paths
-    MODELS_RESULTS_DIR_PATH,  # 31
-    FPS_OUTPUT_DIR_PATH,
-    # Files
-    PRED_FPS_APPLICATION,  # 16
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SRC_PATH = PROJECT_ROOT / "src"
+sys.path.insert(0, str(SRC_PATH))
 
 from mlinvitrotox.utils.model import Model
 
 
 @click.command("eval")
-@click.option("--model", "-m", default="2024-08-09_20-08-13", help="name of the model")
-def run_evaluation(model):
+@click.option("--model", "-m", default="models_v3", help="name of the model")
+@click.option(
+    "--output",
+    "-o",
+    required=True,
+    type=click.Path(path_type=Path),
+    help="path to directory where the metric file should be stored. It will be created if it does not exist.",
+)
+def run_evaluation(model, output):
     """
     Evaluate models
 
     """
     model_instance = Model()
-    logs_folder = Path(MODELS_RESULTS_DIR_PATH)
-    run_folder = model
-
-    model_path = Path(logs_folder / run_folder)
-    model_instance.load(model_path)
-
-    # Get predicted application fingerprints for similarity comparison
-    fps_output_directory = Path(FPS_OUTPUT_DIR_PATH)
-    predfps_output_file = fps_output_directory / PRED_FPS_APPLICATION
-    predfps_df = predict.load_application_data(predfps_output_file)
-    predfps_df.set_index("chem_id", inplace=True)
-
-    print("Predictions")
-    predictions_df = model_instance.predict(predfps_df)
-    predictions_df = predictions_df.sort_values("aeid")
+    model_instance.load(model)
 
     metrics_dfs_list = []
 
@@ -49,14 +38,13 @@ def run_evaluation(model):
     aeids = model_instance.df_assay_info["aeid"].astype("str").to_list()
     for aeid in tqdm(aeids, desc="Processing AEIDs"):
         aeid_path = (
-            Path(model_instance.target_variable)
-            / model_instance.ml_algorithm
+            Path(model_instance.ml_algorithm)
             / str(aeid)
         )
-        preproc_path = aeid_path / "Feature_Selection_RandomForestClassifier"
+        preproc_path = aeid_path / "FS_RandomForest"
 
         # load metrics
-        metrics_path = preproc_path / "XGBClassifier" / "test" / "metrics.csv"
+        metrics_path = preproc_path / "mb_val_structure" / "metrics.csv"
         metrics_path = model_instance.get_path(metrics_path)
         met_df = pd.read_csv(metrics_path)
         met_df.insert(loc=0, column="aeid", value=aeid)
@@ -66,14 +54,15 @@ def run_evaluation(model):
     metrics_df = pd.concat(metrics_dfs_list)
     metrics_df = metrics_df.sort_values("aeid")
 
-    # Save predictions and metrics
-    output_predictions_file = logs_folder / run_folder / "modeltraining_predictions.csv"
-    output_metrics_file = logs_folder / run_folder / "modeltraining_metrics.csv"
-
-    predictions_df = predict.sort_by_aeid_and_chem_id(predictions_df)
-    predictions_df.round(5).to_csv(output_predictions_file, index=False)
+    # Save metrics
+    output_metrics_file = Path(output)
+    
+    output_metrics_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Saving metrics to: {output_metrics_file.resolve()}")
+    
     metrics_df.round(5).to_csv(output_metrics_file, index=False)
-    print("Predictions and metrics stored.")
+    print("Metrics stored.")
 
 
 if __name__ == "__main__":

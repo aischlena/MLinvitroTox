@@ -337,17 +337,19 @@ tags
 .renku/tmp
 .renku/cache
 
+# input data
+/data/input/hrms_massbank/published/*
+/data/input/sirius/massbank_toxicity_5o8*
+/data/input/sirius/sources*
+/data/*
+
 # VSCode
 .vscode/
+
+# random stuff
+/trystuff/*
 
 /userdata/*
 /results/*
 /tmp/*
 /models/*
-
-/data/input/hrms_massbank/published/*
-/data/input/sirius/massbank_toxicity_5o8_eawag_sept2023_all/*
-/data/input/sirius/sources_fractions/*
-/data/input/invitro/pytcpl/*
-/data/results/models/*
-

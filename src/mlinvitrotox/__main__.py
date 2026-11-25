@@ -1,4 +1,4 @@
-import mlinvitrotox
-import sys
+from mlinvitrotox import main
 
-sys.exit(mlinvitrotox.main())
+if __name__ == "__main__":
+    main()

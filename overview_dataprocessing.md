@@ -30,33 +30,19 @@ The SIRIUS directories need to be extracted before they can be processed with ML
 
 Source:  `https://zenodo.org/records/10213786` or `https://github.com/MassBank/MassBank-data`
 
-The folder contains 100'026 files (462 MB) (27.03.2024). When new MassBank files become available, they need to be added to this folder and everything has to be reprocessed.
+The folder contains 85'758 files downladed from the MassBank repository (462 MB) (02.10.2024).
 
-TODO load from external source (check whether we have latest state of files)
+delete_gc: all .txt folders in Published are being deleted that dont have AC$INSTRUMENT_TYPE =        ESI,     APCI, APPI, MALDI and deleted files are logged in delted_files.csv
 
-Note: We are using a version from Sept. 2023 plus Eawag spectra that have not yet been released. The eawag files habe been submitted in the meantime. 
+split_pos_neg: put folders in Positive or Negative folder based on their ionization
 
-These files (1) are processed with `process_files` and returned as a dataframe. In `filter_data`, the dataframe is filtered and SIRIUS training structures from file (2) are marked in the column `sirius_training` as `unsafe` if present in (2) or `safe` otherwise.
+group_by_inchikey: group the different spectra by their inchikeys into one folder, saved in combined_neg/pos
 
-#### SIRIUS training structures (open-access)
+2. true fps and predicted fps for massbank
 
-2a. `data/input/sirius/sirius_training_structures_positive-mode_inchi.tsv`
+True fps were calculated over the file sirius_cal_fps_true 
 
-The file is from `https://bio.informatik.uni-jena.de/software/sirius/`, section `Integration of CSI:FingerID`. We store the positive mode file and use it to assess which chemicals are "safe" to validate on. 
 
-NEWSIRIUS check whether this file will be updated
-
-NEWSIRIUS The pipeline (and the publication) is for the positive mode only. Later: negative mode
-
-Using the INCHIKEYs from file (2a), the DTXSIDs were retrieved from `https://comptox.epa.gov/dashboard/batch-search` on April 23, 2024.
-
-2b. `data/input/sirius/sirius_training_structures_positive-mode_inchi_dtxsid.csv`
-
-#### Unique GUIDs
-
-0. `data/input/hrms_massbank/massbank_unique_guids.csv`
-
-This function needs to be run only once. It creates a file with 20,000 unique GUIDs for the MassBank data.
 
 
 ### Output:
@@ -117,13 +103,7 @@ This is an output from step 1.
 
 #### True fingerprints by DTXSID
 
-13. `data/processed/chemical_fingerprints/training_true-fps.parquet`
-
-#### Intermediate sdf file
-
-This file is not needed later on but we keep it to check whether the rdkit package version has an impact.
-
-xx. `data/processed/chemical_fingerprints/intermediate/Chemical_List_ToxCast_invitroDB_v3_5-2023-07-07_clean.sdf`
+13. `data/processed/chemical_fingerprints/ToxCast_true_fps.csv`
 
 #### File with DTXSID, SMILES, standardized_smiles
 
@@ -136,17 +116,10 @@ xx. `data/processed/chemical_fingerprints/intermediate/Chemical_List_ToxCast_inv
 
 14. `data/processed/chemical_fingerprints/validation_true-fps.parquet`
 
-#### Intermediate sdf file
-
-This file is not needed later on but we keep it to check whether the rdkit package version has an impact.
-
-xx. `data/processed/chemical_fingerprints/intermediate/massbank_published-data_smiles_clean.sdf`
 
 #### File with DTXSID, SMILES, standardized_smiles
 
-xx. `data/processed/chemical_fingerprints/intermediate/massbank_published-data_smiles_clean.csv`
-
-NEWSIRIUS dependence on fingerprints: which fingerprints? which lengths?
+xx`data\processed\chemical_fingerprints\intermediate\Chemical_List_ToxCast_invitroDB_v4_1-2025-08-17_stdsmiles.csv`
 
 
 
@@ -161,13 +134,6 @@ These step is done twice, for validation and testing.
 
 3. `data/input/sirius/csi_fingerid.tsv`
 
-5. `data/input/sirius/massbank_toxicity_5o8_eawag_sept2023_all`
-
-SIRIUS output for the MassBank files. They need to be unzipped.
-
-TODO provide with a link
-
-TODO these files are currently in gitignore
 
 12. `data/processed/hrms_massbank/massbank_published-data_complete.csv`
 
@@ -177,31 +143,15 @@ Output from step 1
 
 Output from Step 2
 
-### Input (for application): 
-
-3. `data/input/sirius/csi_fingerid.tsv`
-
-6. `data/input/sirius/sources_fractions` (not open-access)
-
-SIRIUS output for PARC files. They need to be unzipped.
-
-!!! This files are not open-access !!!
-
-TODO unzip
-
-TODO this files are currently in gitignore
-
 13. `data/processed/chemical_fingerprints/training_true-fps.parquet`
 
 Output from Step 2
 
 ### Output (for validation):
 
-15. `data/processed/chemical_fingerprints/validation_sirius_pred-fps.parquet`
+15. `data/processed/chemical_fingerprintsPred_FPs_neg.csv`
+15. `data/processed/chemical_fingerprintsPred_FPs_pos.csv`
 
-### Output (for application):
-
-16. `data/input/processed/chemical_fingerprints/application_sirius_pred-fps.parquet`
 
 
 

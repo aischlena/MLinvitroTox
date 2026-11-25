@@ -1,0 +1,20 @@
+name: mlinvitrotox_posneg
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ipykernel
+  - python=3.12
+  - pip=26.1.2
+  - pip:
+      - imbalanced-learn==0.14.0
+      - joblib==1.5.2
+      - numpy==2.5.0
+      - pandas==2.3.3
+      - pytz==2026.2
+      - scikit-learn==1.6.1
+      - scipy==1.18.0
+      - threadpoolctl==3.6.0
+      - tzdata==2026.2
+      - xgboost==3.1.2
+

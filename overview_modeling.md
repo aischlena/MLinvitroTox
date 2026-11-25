@@ -61,21 +61,7 @@ The ICE references data contains information on the mechanistic targets of each 
 
 The true fingerprints are used as clustering input.
 
-13. `data/processed/chemical_fingerprints/training_true-fps.parquet`
-
-#### Mappings from chemicals (as DTXSIDs) to AbsoluteIndexes
-
-Used to split into training, validation_true and validation_pred
-
-20. `data/processed/chemical_fingerprints/hrms_massbank/massbank_true-vs-pred-fingerprint_mappings.csv`
-
-#### AbsoluteIndexes passed validation
-
-This files stores the stores the AbsoluteIndexes from the SIRIUS fingerprint that were fitted with good enough recall and precision in the data processing.
-
-21. `data/processed/chemical_fingerprints/validation/massbank_validation_selected_absindex.csv`
-
-If the config flag "sirius_quality_filtering" is set to 1, only the selected SIRIUS fingerprints bits with a high enough recall and precision are used for modelling
+13. `data/processed/chemical_fingerprints/Toxcast_True_FPs.csv`
 
 
 ### Output:
@@ -107,10 +93,6 @@ All the modeling output are stored in the models folder. (in .gitignore)
 
 13. `data/processed/chemical_fingerprints/training_true-fps.parquet`
 
-
-#### Predicted application fingerprints
-
-16. `data/processed/chemical_fingerprints/application_sirius_pred-fps.parquet`
 
 
 ### Output

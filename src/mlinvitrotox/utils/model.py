@@ -13,7 +13,6 @@ import click
 from tqdm import tqdm
 
 import mlinvitrotox.utils.training as ml
-import mlinvitrotox.utils.get_predicted_fps as get_predfps
 import mlinvitrotox.utils.predict as predict
 
 SELECTED_AEIDS = "selected_aeids.csv"
@@ -21,50 +20,59 @@ SELECTED_CHEMICALS = "selected_chemicals.csv"
 
 
 class Model:
-    model_repo = "https://zenodo.org/records/13323297/files/"
+    model_repo = "https://zenodo.org/records/23262638/files/"
 
     def __init__(
-        self, target_variable: str = "hitcall_c", ml_algorithm: str = "classification"
+        self, ml_algorithm: str = "class"
     ) -> None:
-        self.target_variable = target_variable
         self.ml_algorithm = ml_algorithm
 
     def load(self, path: str | Path):
         model_path = Path(path)
-        self.model_path = model_path
 
-        # if it doesn't exist, check if it's a model name that we can download from zenodo
         if not model_path.exists():
             try:
                 model_name = model_path.with_suffix("")
                 model_path = self.download(model_name)
+
             except RuntimeError as e:
                 raise FileNotFoundError(
-                    f"Could not find the model file {model_path}. To use the provided models, specify '-m mlinvitrotox_model'."
-                )
+                    f"Could not find model {path}. "
+                    "To use the provided models, specify '-m mlinvitrotox_model'."
+                ) from e
 
-        if model_path.suffix == ".itox":
-            # Open the zip file
-            zip_ref = zipfile.ZipFile(model_path, "r")
+        # Store the resolved model path
+        self.model_path = Path(model_path)
+
+        #print(f"Resolved model path: {self.model_path.resolve()}")
+        #print(f"Model exists: {self.model_path.exists()}")
+
+        if self.model_path.suffix == ".itox":
+            zip_ref = zipfile.ZipFile(self.model_path, "r")
 
             def get_path(sub_path):
-                # Open the specific CSV file inside the zip
                 try:
                     return zip_ref.open(Path(sub_path).as_posix())
                 except KeyError as e:
                     raise FileNotFoundError(e)
-        elif model_path.is_dir():
+
+        elif self.model_path.is_dir():
 
             def get_path(sub_path):
-                return model_path / sub_path
+                return self.model_path / sub_path
+
         else:
-            raise RuntimeError(f"Failed to open file {model_path}")
+            raise RuntimeError(f"Failed to open file {self.model_path}")
 
         self.get_path = get_path
 
         # load true training fingerprints
-        training_fps_path = get_path("training_true-fps.parquet")
+        training_fps_path = get_path("ToxCast_True_FPS.csv")
         self.df_truefps = ml.get_fingerprint_df(training_fps_path)
+
+        # load features to keep
+        features_to_keep_path = get_path("features_to_keep.csv")
+        self.features_to_keep = pd.read_csv(features_to_keep_path)["fingerprints"].tolist()
 
         # load logged assay information overview
         assay_info_path = get_path(SELECTED_AEIDS)
@@ -72,152 +80,185 @@ class Model:
         df_assay_info["aeid"] = df_assay_info["aeid"].astype("str")
         self.df_assay_info = df_assay_info
 
-        # load metrics file
-        metrics_path = get_path("modeltraining_metrics.csv")
-        df_metrics = pd.read_csv(metrics_path)
-        df_metrics["aeid"] = df_metrics["aeid"].astype("int")
-        self.df_metrics = df_metrics.sort_values("aeid")
-
     def download(self, model_name: str):
-        url = self.model_repo + "/" + str(model_name) + ".itox"
-        appdir = Path(click.get_app_dir("mlinvitrotox"))
+        url = self.model_repo + str(model_name) + ".itox"
 
-        appdir.mkdir(parents=True, exist_ok=True)
+        # Find project root (directory containing pyproject.toml)
+        project_root = Path.cwd()
 
-        # Define the path to the TOML file
-        toml_file = Path(appdir) / "config.toml"
+        for parent in [project_root, *project_root.parents]:
+            if (parent / "pyproject.toml").exists():
+                project_root = parent
+                break
 
-        # Default value for "model_cache"
-        default_value = Path(appdir) / "model_cache/"
-
+        # Default model directory inside the repository
+        default_value = project_root / "results"
         default_value.mkdir(parents=True, exist_ok=True)
 
-        # Check if the file exists
+        # Optional configuration override
+        appdir = Path(click.get_app_dir("mlinvitrotox"))
+        appdir.mkdir(parents=True, exist_ok=True)
+
+        toml_file = appdir / "config.toml"
+
         if toml_file.exists():
-            # Load the existing TOML file
             with open(toml_file, "r") as file:
                 config = toml.load(file)
-                model_cache = config.get("model_cache", str(default_value))
+
+            model_cache = Path(
+                config.get("model_cache", str(default_value))
+            )
         else:
-            # File does not exist, create it with default values
             config = {"model_cache": str(default_value)}
+
             with open(toml_file, "w") as file:
                 toml.dump(config, file)
-            model_cache = Path(default_value)
 
-        local_filename = Path(model_cache) / f"{model_name}.itox"
+            model_cache = default_value
 
+        model_cache.mkdir(parents=True, exist_ok=True)
+
+        local_filename = model_cache / f"{model_name}.itox"
+
+        print(f"Model directory: {model_cache.resolve()}")
+
+        # Avoid downloading an existing model again
         if local_filename.exists():
+            print(f"Using existing model: {local_filename}")
             return local_filename
 
-        # Send a GET request to the URL
-        response = requests.get(url, stream=True)
+        response = requests.get(url, stream=True, timeout=60)
 
         if not response.ok:
             raise RuntimeError(
-                f"Could not find the model {model_name} in the online model repository."
+                f"Could not find model {model_name} in the online repository."
             )
 
-        print("Downloading file ")
-        # Open the local file in write-binary mode and save the contents
+        print(f"Downloading model {model_name}...")
+
         with open(local_filename, "wb") as file:
             for chunk in tqdm(response.iter_content(chunk_size=8192)):
-                file.write(chunk)
+                if chunk:
+                    file.write(chunk)
 
-        print(f"Downloaded {local_filename} from {url}")
+        print(f"Downloaded model to: {local_filename.resolve()}")
 
         return local_filename
 
-    def predict(self, df_predfps):
-        # only keep fingerprints bits used for training
-        df_predfps_selected = get_predfps.keep_selected_fps_bits(
-            df_predfps,
-            self.df_truefps,
+    def predict(self, df_predfps, similarity_method: str | None = None, aeids: list[str] | None = None, mechanistic_target: str | None = None, signal_direction: str | None = None,):
+        """
+        Run all models on the prepared prediction fingerprints.
+        """
+
+        # Make sure chem_id is retained
+        columns_to_keep = [
+            str(col)
+            for col in self.features_to_keep
+        ]
+
+        if "chem_id" not in columns_to_keep:
+            columns_to_keep.insert(0, "chem_id")
+
+        df_pred = df_predfps.loc[:, columns_to_keep].copy()
+
+        chem_ids = df_pred.pop("chem_id")
+
+        # AEIDs to predict
+        df_assays = self.df_assay_info.copy()
+
+        # Filter by AEID
+        if aeids is not None:
+            aeids = [str(aeid) for aeid in aeids]
+            df_assays = df_assays[
+                df_assays["aeid"].astype(str).isin(aeids)
+            ]
+
+        # Filter by mechanistic target
+        if mechanistic_target is not None:
+
+            # Match any of the provided search terms
+            mask = pd.Series(False, index=df_assays.index)
+
+            for target in mechanistic_target:
+                mask |= df_assays["MechanisticTarget"].str.contains(
+                    target,
+                    case=False,
+                    na=False,
+                    regex=False,
+                )
+
+            matched_targets = (
+                df_assays.loc[mask, "MechanisticTarget"]
+                .dropna()
+                .unique()
+            )
+
+            print(f"Mechanistic targets matching {mechanistic_target}:")
+
+            for target in matched_targets:
+                print(f"  - {target}")
+
+            df_assays = df_assays[mask]
+
+        # Filter by signal direction
+        if signal_direction is not None:
+            df_assays = df_assays[
+                df_assays["signal_direction"] == signal_direction
+            ]
+
+        # AEIDs to predict
+        aeids = df_assays["aeid"].astype(str)
+
+        if df_assays.empty:
+            raise ValueError("No assays match the selected filters.")
+
+        all_predictions = []
+
+        # Cache training fingerprints
+        train_fp_cache = {}
+
+        for aeid in aeids:
+            print(f"Running model for AEID {aeid} ...")
+
+            pred_df = predict.run_model(
+                aeid=aeid,
+                df_pred=df_pred,
+                chem_ids=chem_ids,
+                true_fps=self.df_truefps,
+                get_path=self.get_path,
+                train_fp_cache=train_fp_cache,
+                similarity_method=similarity_method,
+            )
+
+            all_predictions.append(pred_df)
+
+        # Combine all AEIDs
+        all_predictions_df = pd.concat(
+            all_predictions,
+            ignore_index=True
         )
 
-        # initialize
-        list_dfs_pred = []
+        # Merge assay information
+        all_predictions_df["aeid"] = (
+            all_predictions_df["aeid"].astype(str)
+        )
 
-        # for each aeid
-        aeids = self.df_assay_info["aeid"].astype("str").to_list()
+        df_assay = self.df_assay_info.copy()
+        df_assay["aeid"] = df_assay["aeid"].astype(str)
 
-        for aeid in tqdm(aeids, desc="Processing AEIDs"):
-            df_pred = self.predict_aeid(aeid, df_predfps_selected)
-            if df_pred is not None:
-                list_dfs_pred.append(df_pred)
-
-        # concatenate
-        df_predictions = pd.concat(list_dfs_pred)
-        df_predictions["prediction"] = df_predictions["prediction"].astype(int)
-
-        # merge predictions with assay information
-        df_predictions = pd.merge(
-            df_predictions,
-            self.df_assay_info[["aeid", "MechanisticTarget", "signal_direction"]],
+        predictions_df = pd.merge(
+            all_predictions_df,
+            df_assay,
             on="aeid",
             how="left",
         )
 
-        # Calculate score per endpoint
-        df_predictions = predict.calculate_endpoint_score(df_predictions)
+        # Calculate endpoint scores
+        predictions_df = predict.calculate_endpoint_score(
+            predictions_df
+        )
 
-        return df_predictions
-
-    def predict_aeid(self, aeid, df_predfps_selected):
-        chem_ids = df_predfps_selected.index
-
-        aeid_path = Path(self.target_variable) / self.ml_algorithm / str(aeid)
-        if True:  # TODO add a check if file exists
-            # get true fingerprints for selected chemicals
-            selected_chemicals_file = self.get_path(aeid_path / SELECTED_CHEMICALS)
-            df_truefps_selected = predict.get_true_fingerprints_for_selected_chemicals(
-                selected_chemicals_file,
-                self.df_truefps,
-                self.target_variable,
-            )
-
-            # load classifier and preprocessing pipeline
-            preproc_path = aeid_path / "Feature_Selection_RandomForestClassifier"
-            try:
-                preprocessor_path = self.get_path(
-                    Path(preproc_path) / "preprocessing_model.joblib"
-                )
-                preprocessor = joblib.load(preprocessor_path)
-            except FileNotFoundError:
-                preprocessor = None
-
-            try:
-                classifier_path = self.get_path(
-                    Path(preproc_path)
-                    / "XGBClassifier"
-                    / "best_estimator_full_data.joblib"
-                )
-                classifier = joblib.load(classifier_path)
-            except FileNotFoundError:
-                classifier = None
-
-            # catch unsuccessful runs
-            if classifier is None:
-                return None
-            # preprocess fingerprints
-            preprocessed_truefps = preprocessor.transform(df_truefps_selected)
-            preprocessed_predfps = preprocessor.transform(df_predfps_selected)
-
-            # calculate maximum cosine similarity
-            max_similarities = predict.calculate_maximum_similarity(
-                preprocessed_predfps,
-                preprocessed_truefps,
-            )
-
-            # calculate predictions for each data point
-            df_pred = predict.calculate_predictions(
-                classifier,
-                preprocessed_predfps,
-                chem_ids,
-                max_similarities,
-                aeid,
-            )
-            return df_pred
+        return predictions_df
 
     def export(self, filepath: str | Path, export_stats=False):
         """Exports current model to an .itox file at the given path
@@ -249,7 +290,8 @@ class Model:
 
             # add base
             include_list += [self.model_path / "modeltraining_metrics.csv"]
-            include_list += [self.model_path / "training_true-fps.parquet"]
+            include_list += [self.model_path / "ToxCast_True_FPS.csv"]
+            include_list += [self.model_path / "features_to_keep.csv"]
             # selected_aeids.csv will be created later
 
             # add logs
@@ -257,10 +299,10 @@ class Model:
 
             # for each aeid
             failed_aeids = []
-            aeid_folders = self.model_path / self.target_variable / self.ml_algorithm
+            aeid_folders = self.model_path / self.ml_algorithm
             for aeid_folder in aeid_folders.glob("*/"):
                 if (
-                    aeid_folder / "Feature_Selection_RandomForestClassifier"
+                    aeid_folder / "FS_RandomForest"
                     not in aeid_folder.iterdir()
                 ):
                     continue
@@ -270,22 +312,40 @@ class Model:
 
                 include_list += [aeid_folder / "selected_chemicals.csv"]
                 feature_selection_path = (
-                    aeid_folder / "Feature_Selection_RandomForestClassifier"
+                    aeid_folder / "FS_RandomForest"
                 )
                 include_list += [feature_selection_path / "preprocessing_model.joblib"]
-                include_list += [feature_selection_path / "selected_features.csv"]
                 estimator_path = (
                     aeid_folder
-                    / "Feature_Selection_RandomForestClassifier"
+                    / "FS_RandomForest"
                     / "XGBClassifier"
                 )
                 include_list += [estimator_path / "best_estimator_full_data.joblib"]
+                include_list += [estimator_path / "selected_features.csv"]
 
                 # add metric folders
                 if export_stats:
-                    include_list += list(estimator_path.rglob("mb_val_sirius/*"))
-                    include_list += list(estimator_path.rglob("mb_val_structure/*"))
-                    include_list += list(estimator_path.rglob("test/*"))
+                    wanted_files = [
+                        "cm_default.svg",
+                        "metrics.csv",
+                        "report_default.csv",
+                        "roc_curve.svg",
+                        "test_predictions_default.csv",
+                        "threshold.csv",
+                    ]
+
+                    for folder in [
+                        "mb_val_srs_neg",
+                        "mb_val_srs_pos",
+                        "mb_val_structure",
+                    ]:
+                        folder_path = feature_selection_path / folder
+
+                        include_list += [
+                            folder_path / filename
+                            for filename in wanted_files
+                            if (folder_path / filename).is_file()
+                        ]
 
             # update selected aeids files to not contain failed aeids
             selected_aeids_path = self.get_path("selected_aeids.csv")
@@ -305,6 +365,3 @@ class Model:
                 zipf.writestr("selected_aeids.csv", csv_buffer.getvalue())
         else:
             raise RuntimeError(f"Unkown model file {self.model_path}")
-
-    def copy_metrics(self):
-        pass
