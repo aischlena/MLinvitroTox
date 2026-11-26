@@ -14,7 +14,7 @@ The package contains
 - scripts for users to run the models on their data
 
 
-## B. Getting started using git and windows
+## B. Getting started using git
 
 ```
 git clone https://github.com/aischlena/MLinvitroTox.git
