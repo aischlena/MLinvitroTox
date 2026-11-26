@@ -14,8 +14,20 @@ The package contains
 - scripts for users to run the models on their data
 
 
-## B. Getting started
+## B. Getting started using Git Bash
 
+```
+git clone https://github.com/aischlena/MLinvitroTox.git
+cd MLinvitroTox
+
+python -m venv .venv
+source .venv/Scripts/activate
+
+python -m pip install --upgrade pip
+python -m pip install .
+
+mlinvitrotox --help
+```
 
 
 ## C. Example / Usage
