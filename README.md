@@ -5,24 +5,17 @@ MLinvitroTox performs high-throughput hazard-based prioritization of high-resolu
 
 ## A. Project description
 
-MLinvitroTox is an open-source Python package developed to provide a fully automated high-throughput pipeline for hazard-driven prioritization of toxicologically relevant signals among tens of thousands of signals commonly detected in complex environmental samples through nontarget high-resolution mass spectrometry (NTS HRMS/MS). MLinvitroTox is a machine learning (ML) framework comprising hundreds of independent XGBoost classifiers trained on molecular fingerprints from chemical structures and target specific endpoints from the ToxCast/Tox21 [invitroDBv4.1 database](https://www.epa.gov/comptox-tools/exploring-toxcast-data). MLinvitroTox predicts a bioactivity fingerprint for each unidentified HRMS feature (a distinct m/z ion) based on the molecular fingerprints derived from MS2 fragmentation spectra. The binary bioactivity fingerprints are used as the basis for prioritizing the HRMS features towards further elucidation and analytical confirmation. This approach adds toxicological relevance to environmental analysis by focusing the time-consuming molecular identification efforts on features most likely to cause adverse effects. 
-It was first developed by Arturi et al. [MLinvitroTox github](https://github.com/aischlena/MLinvitroTox/tree/main) using Sirius 5.8.2 for the positive ionization mode. The model is here expanded to include both the positive and negative ionization mode using Sirius 6.1.0. It includes 300 independent XGBoost classifiers.
+MLinvitroTox is an open-source Python package developed for hazard-driven prioritization of toxicologically relevant signals detected in complex environmental samples through nontarget high-resolution mass spectrometry (NTS HRMS/MS). MLinvitroTox is a machine learning (ML) framework comprising 300 independent XGBoost classifiers trained on molecular fingerprints from chemical structures and target specific endpoints from the ToxCast/Tox21 [invitroDBv4.1 database](https://www.epa.gov/comptox-tools/exploring-toxcast-data). MLinvitroTox predicts a bioactivity for each specific endpoint for every unidentified HRMS feature (a distinct m/z ion) based on the molecular fingerprints derived from MS2 fragmentation spectra. The binary bioactivity fingerprints are used as the basis for prioritizing the HRMS features towards further elucidation and analytical confirmation. This approach adds toxicological relevance to environmental analysis by focusing the time-consuming molecular identification efforts on features most likely to cause adverse effects. 
+MLinvitroToc was first developed by Arturi et al. [MLinvitroTox 2 github]([https://github.com/aischlena/MLinvitroTox/tree/main](https://github.com/aischlena/MLinvitroTox/tree/legacy_mlinvitrotox_2/src/mlinvitrotox)) using Sirius 5.8.2 for the positive ionization mode. The model was retrained using fingerprints computed with SIRIUS 6.1.0 and expanded to include both the positive and negative electroionization modes. Following information relates to the latest model release.
 
 The package contains 
 - scripts that were used to build the models
-- input data to build the models (in `data/input`) and processed data (in `data/processed`)
-- modeling results and the models
-- a streamlit app to view the results
+- modeling results
 - scripts for users to run the models on their data
 
 
 ## B. Getting started
 
-Currently, the package is only available on PyPI and can be installed as follows. 
-
-```
-pip install mlinvitrotox
-```
 
 
 ## C. Example / Usage
